@@ -51,8 +51,19 @@ export interface ChangelogSource {
  * 2. jsDelivr CDN —— 备用
  * 3. GitHub Raw —— 备用（部分地区连不上）
  */
+function localChangelogUrl(): string {
+    try {
+        // 下载站位于 /download/，上一级就是站点根，data/ 与它同级。
+        // 用当前页面 URL 推导，站点挂在域名根或仓库子路径下都能命中。
+        return new URL('../data/changelog.json', window.location.href).href;
+    } catch (e) {
+        return '/data/changelog.json';
+    }
+}
+
 export const DEFAULT_CHANGELOG_SOURCES: ChangelogSource[] = [
-    { url: `/data/changelog.json`, label: '本站' },
+    { url: localChangelogUrl(), label: '本站' },
+    { url: '/data/changelog.json', label: '本站（根路径）' },
     { url: 'https://cdn.jsdelivr.net/gh/riluo-ya/pth@main/data/changelog.json', label: 'CDN' },
     { url: 'https://raw.githubusercontent.com/riluo-ya/pth/main/data/changelog.json', label: 'GitHub' },
 ];

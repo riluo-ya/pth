@@ -30,12 +30,18 @@ jobs:
           echo "--- dist 顶层 ---"
           ls -la ./dist
           echo "--- 必须存在的路径 ---"
+          missing=0
           for p in index.html CNAME data/changelog.json data/faq.json \
+                   data/changelog-widget.js \
                    data/pcd.data data/dl.data data/lz.data \
                    quiz/index.html pmth/index.html philzy/index.html \
                    signal/index.html download/index.html; do
-            if [ -f "./dist/$p" ]; then echo "OK   $p"; else echo "MISS $p"; fi
+            if [ -f "./dist/$p" ]; then echo "OK   $p"; else echo "MISS $p"; missing=1; fi
           done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::dist 缺少必要文件，请检查 copy-static.mjs"
+            exit 1
+          fi
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
