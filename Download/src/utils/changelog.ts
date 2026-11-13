@@ -7,17 +7,23 @@
 //   "notice": "置顶公告，不需要就留空字符串或删掉",
 //   "logs": [
 //     {
-//       "date": "2026-09-27",
-//       "scope": ["download"],
-//       "content": "完整正文（all 页面显示）",
-//       "contentByScope": { "download": "下载站那一段", "pmth": "谱面工坊那一段" }
+//       "date": "2026-11-13",
+//       "pages": {
+//         "download": "下载站这次改了什么",
+//         "pmth":     "谱面工坊这次改了什么",
+//         "signal":   "",                // 没填 = 空的，SIGNAL 这天没有更新
+//         "other":    "站点改版 / 域名更换等不属于某个子页面的更新"
+//       }
 //     }
 //   ]
 // }
-// scope 决定这条日志出现在哪些页面：download=下载站，pmth=谱面工坊，signal=SIGNAL。
-// 导航页 / 蓝奏云读全部完整正文，其余各页只取自己那一段；
-// 筛完一条都没有时页面显示「暂无信息」。没有 scope 的旧日志默认归到 download。
-// content 里用 \n 换行，一行 = 一个列表项；也可以直接写 HTML，会原样渲染。
+// logs[] 里每个元素 = 一天，pages 里按栏目填写，想填哪个填哪个。
+// download/pmth/signal 对应三个子页面；other 是「其他 / 站点级」更新，
+// 没有对应子页面，只在导航页 / 蓝奏云（scope=all）的全部视图里出现。
+// 导航页 / 蓝奏云显示全部非空分栏；其余各页只取自己那一栏，
+// 自己那栏没填则这一整天不出现；所有天都没内容显示「暂无信息」。
+// 每栏正文用 \n 换行，一行 = 一个列表项；也可以直接写 HTML，会原样渲染。
+// 兼容：早期平铺格式（date/scope/content）与 contentByScope 分段格式仍可读取。
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -127,58 +133,110 @@ function renderContent(content: unknown): string {
 
 interface RawLog {
     date?: string;
+    /** 新格式：一天里按页面分栏，没填的键就是空的 */
+    pages?: Record<string, string>;
+    /** 旧格式兼容字段 */
     content?: string;
     scope?: string[] | string;
-    /** 一条日志涉及多个页面时，各页面只显示自己那一段 */
     contentByScope?: Record<string, string>;
 }
 
-/** 这条日志是否属于当前页面；scope='all' 时不过滤 */
-function matchScope(log: RawLog, scope: string): boolean {
-    if (scope === 'all') return true;
+interface DaySection {
+    id: string;
+    name: string;
+    content: string;
+}
+
+const PAGES: { id: string; name: string }[] = [
+    { id: 'download', name: '下载站' },
+    { id: 'pmth', name: '谱面工坊' },
+    { id: 'signal', name: 'SIGNAL' },
+    { id: 'other', name: '其他' },
+];
+
+/** 把「一天」拆成非空分栏；兼容旧格式时自动归并 */
+function sectionsOf(log: RawLog): DaySection[] {
+    const out: DaySection[] = [];
+    if (log.pages && typeof log.pages === 'object' && !Array.isArray(log.pages)) {
+        for (const p of PAGES) {
+            const c = log.pages[p.id];
+            if (typeof c === 'string' && c.trim()) out.push({ id: p.id, name: p.name, content: c });
+        }
+        return out;
+    }
+
     const own = Array.isArray(log.scope)
-        ? log.scope
-        : (log.scope ? [log.scope] : ['download']);
-    return scope.split(',').map(s => s.trim()).some(w => own.indexOf(w) >= 0);
+        ? log.scope.map(String)
+        : (log.scope ? [String(log.scope)] : ['download']);
+    const parts = log.contentByScope && typeof log.contentByScope === 'object'
+        ? log.contentByScope : null;
+    const anyPart = parts && PAGES.some(p => typeof parts[p.id] === 'string' && parts[p.id].trim());
+
+    for (const p of PAGES) {
+        if (own.indexOf(p.id) < 0) continue;
+        const raw = anyPart
+            ? ((typeof parts?.[p.id] === 'string' && parts[p.id].trim()) ? parts[p.id] : log.content)
+            : log.content;
+        if (typeof raw === 'string' && raw.trim()) out.push({ id: p.id, name: p.name, content: raw });
+    }
+    if (!out.length && typeof log.content === 'string' && log.content.trim()) {
+        out.push({ id: 'download', name: '下载站', content: log.content });
+    }
+    return out;
 }
 
-/** 取本页正文：all 看全文；有分段时只取本页那一段，没有对应段落则该条不显示 */
-function pickContent(log: RawLog, scope: string): string | null {
-    if (scope === 'all' || !log.contentByScope || typeof log.contentByScope !== 'object') {
-        return typeof log.content === 'string' ? log.content : null;
-    }
-    for (const w of scope.split(',').map(s => s.trim())) {
-        const part = log.contentByScope[w];
-        if (typeof part === 'string') return part;
-    }
-    return null;
-}
-
-/** 兼容写法：{ logs: [...] } 或直接是数组 [...]，并按当前页面筛选 */
+/**
+ * 按当前页面筛出「天」。
+ * - all：把该天所有非空分栏拼在一起，每段带页面名小标题
+ * - 单页：只取自己那一栏；没填则这一整天跳过
+ */
 export function normalizeLogs(data: unknown, scope = 'all'): UpdateLog[] {
-    if (!data) return [];
-
     let arr: unknown;
-    if (Array.isArray(data)) {
-        arr = data;
-    } else if (typeof data === 'object') {
-        arr = (data as Record<string, unknown>).logs;
-    } else {
-        return [];
-    }
-
+    if (Array.isArray(data)) arr = data;
+    else if (data && typeof data === 'object') arr = (data as Record<string, unknown>).logs;
+    else return [];
     if (!Array.isArray(arr)) return [];
 
-    return (arr as RawLog[])
-        .filter(log => log && typeof log === 'object' && matchScope(log, scope))
-        .map((log): UpdateLog | null => {
-            const raw = pickContent(log, scope);
-            if (raw == null) return null;
-            const content = renderContent(raw);
-            if (!content) return null;
-            return { date: log.date ? String(log.date) : '', content };
-        })
-        .filter((x): x is UpdateLog => x !== null);
+    const wanted = scope.split(',').map(s => s.trim()).filter(Boolean);
+    const out: UpdateLog[] = [];
+    for (const log of arr as RawLog[]) {
+        if (!log || typeof log !== 'object') continue;
+        const all = sectionsOf(log);
+        const visible = scope === 'all' ? all : all.filter(s => wanted.indexOf(s.id) >= 0);
+        if (!visible.length) continue;
+
+        let content: string;
+        if (visible.length === 1) {
+            content = renderContent(visible[0].content);
+        } else {
+            content = visible.map(s =>
+                `<p class="font-semibold text-brand-cyan mt-3 first:mt-0">${escapeHtml(s.name)}</p>` +
+                renderContent(s.content)
+            ).join('');
+        }
+        if (!content) continue;
+        out.push({ date: log.date ? String(log.date) : '', content });
+    }
+    return out;
+}
+
+/** 按日期归组（新结构下通常一组一条，保留以便同日多组时仍能合并） */
+export interface LogGroup {
+    date: string;
+    items: UpdateLog[];
+}
+
+/** 按日期归组：同一日期的多条独立更新挂在同一个日期标题下 */
+export function groupLogsByDate(logs: UpdateLog[]): LogGroup[] {
+    const out: LogGroup[] = [];
+    const map = new Map<string, LogGroup>();
+    for (const log of logs) {
+        const key = log.date || '(无日期)';
+        let g = map.get(key);
+        if (!g) { g = { date: key, items: [] }; map.set(key, g); out.push(g); }
+        g.items.push(log);
+    }
+    return out;
 }
 
 export interface ChangelogResult {

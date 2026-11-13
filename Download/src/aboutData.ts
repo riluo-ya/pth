@@ -1,9 +1,21 @@
 export interface UpdateLog {
     date: string;
     content: string;
+    scope?: string[];
 }
 export const projectDescription = "Phigros 谱面下载器是一个按曲目浏览 Phigros 资源的项目。此外，它还具备将资源直接导出为可在 Phira 或 RPE 中游玩的谱面文件的实用功能。它还配有简洁易用的用户界面，以及音频播放器（开发中）和特定曲目的异常特效。";
 export const updateLogs: UpdateLog[] = [
+    {
+        date: "2026-11-13",
+        content: `
+
+            <ul class="list-disc list-inside space-y-1">
+                <li>修复分享卡片曲绘不显示</li>
+                <li>- 曲绘改为多加速源并行取最快成功的结果，并补上低清曲绘兜底</li>
+                <li>- 曲库 ID 特殊字符正确编码；加载失败时仍生成卡片并可一键重试曲绘</li>
+            </ul>
+        `,
+    },
     {
         date: "2026-10-17",
         content: `

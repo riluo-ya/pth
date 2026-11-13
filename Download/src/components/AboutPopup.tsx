@@ -2,7 +2,7 @@
 import React, { useRef } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { projectDescription } from '../aboutData';
-import { useChangelog } from '../utils/changelog';
+import { useChangelog, groupLogsByDate } from '../utils/changelog';
 
 interface AboutPopupProps {
     isOpen: boolean;
@@ -38,8 +38,10 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
     // 全站统一 changelog.json；下载站只显示 scope 含 download 的条目
     const { logs, notice, sourceLabel, loading, error, reload } = useChangelog(undefined, 'download');
 
-    const latestLog = logs[0];
-    const pastLogs = logs.slice(1);
+    // 同一日期可以有多条独立更新，归到同一个日期标题下展示
+    const groups = groupLogsByDate(logs);
+    const latestGroup = groups[0];
+    const pastGroups = groups.slice(1);
 
     if (!isOpen) return null;
 
@@ -128,36 +130,53 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
-                    {/* 最新更新 */}
-                    {!loading && latestLog && (
+                    {/* 最新更新：同一日期的多条各自成块 */}
+                    {!loading && latestGroup && (
                         <div className="px-6 pt-6 pb-2">
                             <div className="mb-6">
-                                <div className="flex items-center gap-3 mb-3">
+                                <div className="flex items-center gap-3 mb-3 flex-wrap">
                                     <span className="px-2 py-1 rounded bg-brand-cyan/20 text-brand-cyan text-xs font-bold uppercase tracking-wider">最新更新</span>
-                                    <h3 className="font-bold text-white text-lg">{latestLog.date}</h3>
+                                    <h3 className="font-bold text-white text-lg">{latestGroup.date}</h3>
+                                    {latestGroup.items.length > 1 && (
+                                        <span className="px-2 py-0.5 rounded-full bg-white/[.06] border border-white/[.1] text-[11px] text-slate-400">
+                                            {latestGroup.items.length} 条
+                                        </span>
+                                    )}
                                 </div>
-                                <div
-                                    className="bg-slate-800/50 rounded-lg p-4 text-slate-300 text-sm border border-slate-700/50"
-                                    dangerouslySetInnerHTML={{ __html: latestLog.content }}
-                                />
+                                <div className="space-y-2.5">
+                                    {latestGroup.items.map((log, i) => (
+                                        <div
+                                            key={i}
+                                            className="bg-slate-800/50 rounded-lg p-4 text-slate-300 text-sm border border-slate-700/50"
+                                        >
+                                            <div dangerouslySetInnerHTML={{ __html: log.content }} />
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* 版本历史 */}
-                    {!loading && pastLogs.length > 0 && (
+                    {/* 版本历史：每个日期一个手风琴，内部按条分块 */}
+                    {!loading && pastGroups.length > 0 && (
                         <>
                             <div className="px-6 pt-2 pb-2">
                                 <h3 className="text-slate-400 text-sm font-bold uppercase tracking-wider">版本历史</h3>
                             </div>
                             <div className="px-6">
-                                {pastLogs.map((log, idx) => (
+                                {pastGroups.map((group, idx) => (
                                     <AccordionItem
-                                        key={`${log.date}-${idx}`}
-                                        title={log.date}
-                                        isLast={idx === pastLogs.length - 1}
+                                        key={`${group.date}-${idx}`}
+                                        title={group.date + (group.items.length > 1 ? ` · ${group.items.length} 条` : '')}
+                                        isLast={idx === pastGroups.length - 1}
                                     >
-                                        <div dangerouslySetInnerHTML={{ __html: log.content }} />
+                                        <div className="space-y-3">
+                                            {group.items.map((log, i) => (
+                                                <div key={i} className={i > 0 ? 'pt-3 border-t border-slate-700/50' : ''}>
+                                                    <div dangerouslySetInnerHTML={{ __html: log.content }} />
+                                                </div>
+                                            ))}
+                                        </div>
                                     </AccordionItem>
                                 ))}
                             </div>

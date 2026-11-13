@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Song } from '../types';
-import { ghRaw } from '../utils/sources';
+import { SOURCES, getSourceId, resolveRawUrlFor } from '../utils/sources';
+import type { ResourceSource } from '../utils/sources';
 import { useSettings } from '../contexts/SettingsContext';
 import { ChartStats, fetchChartStats, primaryDifficulty } from '../utils/chartStats';
 import { NoticeDialog, Button } from './ui/Dialog';
@@ -53,17 +54,88 @@ function loadImage(url: string, timeoutMs = 8000): Promise<HTMLImageElement | nu
     });
 }
 
+const RESOURCE_REPO = '7aGiven/Phigros_Resource';
+
+/** 曲绘加载结果：图片 + 实际命中的线路名（用于状态提示） */
+interface IllustrationResult {
+    img: HTMLImageElement | null;
+    via: string;
+}
+
 /**
- * 加载曲绘：先用当前加速源，失败再退回 GitHub 直连。
- * 直连域名稳定返回 CORS 头，能显著提高卡片拿到曲绘的成功率；
- * 两次都失败时返回 null，卡片会画占位图，不影响生成。
+ * 按指定加速源拼曲绘地址。
+ * 文件名必须 encodeURIComponent：曲库 ID 里有大量日文 / 中文，还有
+ * 「彼方へ名もなき海辺より.打打だいず&月乃」这类带 & 的 ID，
+ * 直接拼进 URL 容易被当成查询串或片段，导致部分歌曲永远取不到曲绘。
  */
-async function loadIllustration(songId: string): Promise<HTMLImageElement | null> {
-    const path = `7aGiven/Phigros_Resource/refs/heads/illustration/${songId}.png`;
-    // 每个源最多等 8 秒：最坏情况 16 秒后必定出结果，不会再无限等待
-    const viaSource = await loadImage(ghRaw(path));
-    if (viaSource) return viaSource;
-    return await loadImage(`https://raw.githubusercontent.com/${path}`);
+function illustrationUrl(source: ResourceSource, branch: string, songId: string): string {
+    const file = encodeURIComponent(`${songId}.png`);
+    const raw = `https://raw.githubusercontent.com/${RESOURCE_REPO}/refs/heads/${branch}/${file}`;
+    return resolveRawUrlFor(source, raw);
+}
+
+/**
+ * 曲绘候选地址：当前线路排在最前，其余线路依次兜底；
+ * 主曲绘全挂时再补一组低清曲绘（另一个分支，缓存状态不同）。
+ *
+ * 之前的实现只有「当前源 → GitHub 直连」两步，但默认源本来就是 GitHub 直连，
+ * 两次请求其实是同一个地址 —— 国内直连不通时会白等两轮超时，最后只剩占位图。
+ * 现在改成多条线路并行竞争，谁先成功用谁，最坏也只等一轮超时。
+ */
+function illustrationCandidates(songId: string): { label: string; url: string }[] {
+    const ids = [getSourceId(), 'jsdelivr', 'gcore', 'github', 'ghproxy', 'ghproxy2']
+        .filter((id, i, arr) => arr.indexOf(id) === i);
+    const sources = ids
+        .map(id => SOURCES.find(s => s.id === id))
+        .filter((s): s is ResourceSource => !!s);
+
+    const seen = new Set<string>();
+    const out: { label: string; url: string }[] = [];
+    const add = (s: ResourceSource, branch: string) => {
+        const url = illustrationUrl(s, branch, songId);
+        if (seen.has(url)) return;
+        seen.add(url);
+        out.push({ label: s.name + (branch === 'illustrationLowRes' ? '（低清）' : ''), url });
+    };
+
+    // 主曲绘：所有线路一起试
+    sources.forEach(s => add(s, 'illustration'));
+    // 低清兜底：只挑稳定返回 CORS 头的官方 / CDN 线路，代理不参与
+    sources.filter(s => s.kind === 'raw' || s.kind === 'gh')
+        .forEach(s => add(s, 'illustrationLowRes'));
+    return out;
+}
+
+/**
+ * 并行拉取所有候选，取第一张成功加载的图。
+ * 全部失败或总超时后返回 null —— 卡片仍会用占位图生成，不会卡在「正在生成」。
+ */
+async function loadIllustration(songId: string, timeoutMs = 7000): Promise<IllustrationResult> {
+    const candidates = illustrationCandidates(songId);
+    if (!candidates.length) return { img: null, via: '' };
+
+    return new Promise<IllustrationResult>(resolve => {
+        let settled = false;
+        let pending = candidates.length;
+        let timer: number | undefined;
+
+        const finish = (r: IllustrationResult) => {
+            if (settled) return;
+            settled = true;
+            if (timer !== undefined) window.clearTimeout(timer);
+            resolve(r);
+        };
+
+        timer = window.setTimeout(() => finish({ img: null, via: '' }), timeoutMs);
+
+        candidates.forEach(c => {
+            loadImage(c.url, timeoutMs).then(img => {
+                if (settled) return;
+                if (img) finish({ img, via: c.label });
+                else if (--pending === 0) finish({ img: null, via: '' });
+            });
+        });
+    });
 }
 
 export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, onClose }) => {
@@ -72,6 +144,9 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
     const [dataUrl, setDataUrl] = useState<string | null>(null);
     const [status, setStatus] = useState<'idle' | 'building' | 'ready'>('idle');
     const [illuReady, setIlluReady] = useState(false);
+    const [illuStatus, setIlluStatus] = useState<'loading' | 'ok' | 'failed'>('loading');
+    const [illuVia, setIlluVia] = useState('');
+    const [illuAttempt, setIlluAttempt] = useState(0);
     const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
     const [chartInfo, setChartInfo] = useState<{ bpm: number | null; judgeLines: number | null; duration: number | null }>({
         bpm: null,
@@ -114,22 +189,29 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
         let cancelled = false;
         setStatus('building');
         setIlluReady(false);
+        setIlluStatus('loading');
+        setIlluVia('');
         setDataUrl(null);
         setBuildError(null);
         setNoteCounts({});
         setChartInfo({ bpm: null, judgeLines: null, duration: null });
+        illuRef.current = null;
 
-
-        loadIllustration(song.id).then(img => {
+        loadIllustration(song.id).then(({ img, via }) => {
             if (cancelled || !aliveRef.current) return;
             illuRef.current = img;
-            setIlluReady(true); // 失败时为 null，卡片会画占位图
+            setIlluVia(via);
+            setIlluStatus(img ? 'ok' : 'failed');
+            setIlluReady(true); // 全部线路失败时为 null，卡片会画占位图
         });
 
         return () => {
             cancelled = true;
         };
-    }, [isOpen, song?.id]);
+    }, [isOpen, song?.id, illuAttempt]);
+
+    /** 曲绘没加载出来时，重新跑一遍多线路竞争 */
+    const retryIllustration = () => setIlluAttempt(n => n + 1);
 
     // 生成卡片
     const build = useCallback(() => {
@@ -321,7 +403,9 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
                             </div>
                         ) : (
                             <div className="flex flex-col items-center justify-center gap-2 h-64 text-slate-500 text-sm">
-                                正在生成卡片…
+                                {illuStatus === 'loading'
+                                    ? '正在加载曲绘…（多线路并行）'
+                                    : '正在生成卡片…'}
                             </div>
                         )}
                         {loadingNotes && (
@@ -331,6 +415,23 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
                         )}
                     </div>
 
+                    {illuStatus === 'failed' && (
+                        <div className="mt-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+                            <span>曲绘未能加载，已用占位图生成卡片</span>
+                            <button
+                                type="button"
+                                onClick={retryIllustration}
+                                className="flex-shrink-0 px-2.5 py-1 rounded-md border border-amber-400/40 hover:bg-amber-400/15 transition-colors"
+                            >
+                                重试曲绘
+                            </button>
+                        </div>
+                    )}
+                    {illuStatus === 'ok' && illuVia && (
+                        <p className="text-[11px] text-slate-600 mt-2 text-center">
+                            曲绘来源：{illuVia}
+                        </p>
+                    )}
                     <p className="text-xs text-slate-500 mt-2 text-center">
                         💡 手机上长按图片即可保存到相册
                     </p>

@@ -145,13 +145,15 @@ export function setSourceId(id: string): void {
 }
 
 /**
- * 将 raw.githubusercontent.com 的完整 URL 按当前源转换为加速 URL。
+ * 将 raw.githubusercontent.com 的完整 URL 按「指定源」转换为加速 URL。
  * - raw：原样返回
  * - gh（jsDelivr / gcore）：raw 的 refs/heads|tags/<branch> 路径转为 @<branch>
  * - prefix（ghproxy 类）：在原始 URL 前拼接代理前缀
+ *
+ * 抽成可传 source 的形式，是为了让分享卡片等场景能依次尝试多条线路，
+ * 而不是只能拿到「当前选中源」这一个地址。
  */
-export function resolveRawUrl(rawUrl: string): string {
-    const source = getSource();
+export function resolveRawUrlFor(source: ResourceSource, rawUrl: string): string {
     switch (source.kind) {
         case 'raw':
             return rawUrl;
@@ -167,6 +169,11 @@ export function resolveRawUrl(rawUrl: string): string {
         default:
             return rawUrl;
     }
+}
+
+/** 将 raw.githubusercontent.com 的完整 URL 按当前源转换为加速 URL */
+export function resolveRawUrl(rawUrl: string): string {
+    return resolveRawUrlFor(getSource(), rawUrl);
 }
 
 /** 按路径生成 GitHub raw 完整 URL，并自动按当前源转换 */
