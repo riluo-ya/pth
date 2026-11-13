@@ -1,7 +1,7 @@
 # PTH —— Phigros Tool Hub
 
 **PTH（Phigros Tool Hub，Phigros 工具枢纽）** 是一个 Phigros 工具集合站：主页是导航中心，
-下挂谱面下载站、答题验证、谱面工坊、蓝奏云网盘索引与 SIGNAL 演出工具。
+下挂谱面下载站、答题验证、谱面工坊、蓝奏云网盘索引与 SIGNAL 演出工具等
 谱面、曲绘、音频统一从上游公开仓库拉取，本地只做索引、筛选与打包。
 
 - 在线地址：https://phth.cc.cd/
