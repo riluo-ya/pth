@@ -1,0 +1,2147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>谱面工坊 · Phigros Tool Hub</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-0: #07070a;
+            --bg-1: #0f0f18;
+            --bg-2: #161622;
+            --bg-3: rgba(255, 255, 255, 0.04);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.15);
+            --text: #eaeaf0;
+            --text-2: #8a8aa0;
+            --accent: #7c6cf0;
+            --accent-2: #a78bfa;
+            --tap: #60c8ff;
+            --drag: #ffe066;
+            --flick: #ff6b6b;
+            --hold: #5eead4;
+            --shadow: 0 8px 32px rgba(0,0,0,0.4);
+            --radius: 14px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+        html,body { height:100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg-0); color: var(--text); overflow-x: hidden; }
+        .ambient { position:fixed; inset:0; z-index:-1; pointer-events:none; background: radial-gradient(1200px 600px at 10% -10%, rgba(124,108,240,0.12), transparent), radial-gradient(800px 400px at 90% 110%, rgba(94,234,212,0.08), transparent); }
+        .wrap { max-width:1100px; margin:0 auto; padding:32px 20px 60px; }
+        .brand { text-align:center; margin-bottom:32px; animation: fadeDown .7s ease both; }
+        /* PTH 二次开发：返回导航中心 */
+        .pth-back {
+            display:inline-flex; align-items:center; justify-content:center; gap:7px;
+            min-height:36px; padding:0 14px; margin-bottom:20px;
+            font-size:14px; font-weight:600; line-height:1;
+            color:var(--text); text-decoration:none;
+            background:var(--bg-2); border:1px solid var(--border);
+            border-radius:10px;
+            transition: border-color .15s, background .15s, color .15s;
+        }
+        .pth-back:hover { border-color:var(--accent-2); color:var(--accent-2); background:var(--bg-3); }
+        .pth-back:active { transform: translateY(1px); }
+        .pth-back-ico { font-size:16px; line-height:1; }
+        @media (max-width:640px){
+            .pth-back { min-height:44px; padding:0 16px; font-size:15px; margin-bottom:16px; }
+        }
+        .brand h1 { font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight:800; letter-spacing:-0.5px; background: linear-gradient(135deg, #a78bfa, #60c8ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .brand p { color:var(--text-2); font-size:.95rem; margin-top:6px; }
+
+        #loading-overlay {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(7,7,10,0.92); backdrop-filter: blur(16px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 9999; transition: opacity 0.3s ease;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid rgba(124,108,240,0.3);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .modal-overlay {
+            position: fixed; top:0; left:0; right:0; bottom:0;
+            background: rgba(7,7,10,0.85); backdrop-filter: blur(12px);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 10000; opacity: 0; visibility: hidden;
+            transition: all 0.3s ease; padding: 20px;
+        }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: var(--bg-1); padding: 30px; border-radius: var(--radius);
+            text-align: center; max-width: 360px; width: 100%;
+            border: 1px solid var(--border); box-shadow: var(--shadow);
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .modal-overlay.active .modal-content { transform: scale(1); }
+        .modal-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 12px; color: var(--flick); }
+        .modal-msg { color: var(--text-2); margin-bottom: 24px; line-height: 1.5; white-space: pre-wrap; font-size: 0.95rem; }
+        .modal-btn-group { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 15px; }
+        .btn-primary { padding: 10px 24px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: 0.2s; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(124,108,240,0.3); }
+        .btn-secondary { padding: 10px 24px; background: var(--bg-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-weight: 500; font-size: 0.9rem; transition: 0.2s; }
+        .btn-secondary:hover { border-color: var(--border-hover); background: var(--bg-3); }
+        .error-details { background: var(--bg-2); padding: 12px; border-radius: 8px; margin: 15px 0 0 0; font-size: 0.85rem; color: var(--text-2); text-align: left; word-break: break-all; display: none; }
+
+        .uploader {
+            position:relative; border:2px dashed var(--border); border-radius:var(--radius); padding:48px 24px;
+            text-align:center; background:var(--bg-3); transition:.3s ease; cursor:pointer; overflow:hidden;
+            animation: fadeUp .7s .1s ease both; user-select:none;
+        }
+        .uploader:hover, .uploader.drag-active { border-color:var(--accent); background:rgba(124,108,240,0.06); transform:translateY(-2px); }
+        .uploader input[type="file"] { position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; z-index:2; font-size:100px; }
+        .uploader-icon { font-size:2.6rem; margin-bottom:10px; opacity:.9; pointer-events:none; }
+        .uploader h3 { font-size:1.1rem; font-weight:600; pointer-events:none; }
+        .uploader span { color:var(--text-2); font-size:.85rem; display:block; margin-top:6px; pointer-events:none; }
+        .file-chip {
+            display:none; align-items:center; justify-content:center; gap:8px; margin-top:14px;
+            padding:8px 18px; background:rgba(94,234,212,0.08); border:1px solid rgba(94,234,212,0.2);
+            color:var(--hold); border-radius:100px; font-size:.85rem; font-weight:600; width:fit-content;
+            margin-left:auto; margin-right:auto; pointer-events:none;
+        }
+        .file-chip.show { display:inline-flex; }
+        .workspace { display:none; margin-top:24px; gap:20px; flex-direction:column; animation: fadeUp .6s ease both; }
+        .workspace.active { display:flex; }
+        .row { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        @media (max-width:780px) { .row { grid-template-columns:1fr; } }
+        .card { background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius); padding:24px; box-shadow:var(--shadow); transition:.3s ease; }
+        .card:hover { border-color:var(--border-hover); }
+        .card-head { display:flex; align-items:center; gap:10px; margin-bottom:18px; font-weight:700; font-size:1.05rem; }
+        .card-head .dot { width:10px; height:10px; border-radius:50%; box-shadow:0 0 8px currentColor; }
+        .stat-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+        .stat-cell {
+            position:relative; background:var(--bg-0); border:1px solid var(--border); border-radius:12px;
+            padding:16px 12px; text-align:center; transition:.25s ease;
+        }
+        .stat-cell:hover { transform:translateY(-2px); border-color:var(--border-hover); }
+        .stat-cell::after { content:''; position:absolute; bottom:0; left:10%; right:10%; height:3px; border-radius:3px 3px 0 0; opacity:.7; }
+        .stat-cell.tap::after { background:var(--tap); box-shadow:0 0 8px var(--tap); }
+        .stat-cell.drag::after { background:var(--drag); box-shadow:0 0 8px var(--drag); }
+        .stat-cell.flick::after { background:var(--flick); box-shadow:0 0 8px var(--flick); }
+        .stat-cell.hold::after { background:var(--hold); box-shadow:0 0 8px var(--hold); }
+        .stat-num { font-size:1.8rem; font-weight:800; line-height:1; margin-bottom:6px; }
+        .stat-cell.tap .stat-num { color:var(--tap); }
+        .stat-cell.drag .stat-num { color:var(--drag); }
+        .stat-cell.flick .stat-num { color:var(--flick); }
+        .stat-cell.hold .stat-num { color:var(--hold); }
+        .stat-label { font-size:.8rem; color:var(--text-2); }
+        .stat-pct { font-size:.75rem; opacity:.7; margin-top:2px; font-weight:600; }
+        .total-pill {
+            margin-top:16px; padding:18px; border-radius:12px; text-align:center;
+            background:linear-gradient(135deg, rgba(124,108,240,0.12), rgba(167,139,250,0.08)); border:1px solid rgba(124,108,240,0.2);
+        }
+        .total-pill .n { font-size:2.2rem; font-weight:900; background:linear-gradient(135deg, #a78bfa, #60c8ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+        .total-pill .l { font-size:.85rem; color:var(--text-2); margin-top:2px; }
+        .dist-track { margin-top:14px; height:6px; background:var(--bg-0); border-radius:100px; overflow:hidden; display:flex; }
+        .dist-fill { height:100%; transition:width .8s cubic-bezier(.22,1,.36,1); }
+        .mini-canvas-wrap { margin-top:14px; height:130px; background:var(--bg-0); border-radius:10px; overflow:hidden; position:relative; cursor:pointer; }
+        .mini-canvas-wrap canvas { width:100%; height:100%; display:block; }
+        .mini-canvas-wrap .cap { position:absolute; top:8px; left:10px; font-size:.7rem; color:var(--text-2); background:rgba(0,0,0,.4); padding:2px 8px; border-radius:4px; pointer-events:none; }
+        .dynamic-rules { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+        .rule-row { display:flex; align-items:center; gap:8px; background:var(--bg-0); padding:10px 12px; border-radius:10px; }
+        .rule-row select { background:var(--bg-2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:.85rem; outline:none; cursor:pointer; flex:1; }
+        .rule-row select option { background:var(--bg-2); }
+        .rule-row .arrow { color:var(--text-2); font-weight:700; }
+        .rule-row .del-btn { background:none; border:1px solid var(--border); color:var(--flick); width:32px; height:32px; border-radius:6px; cursor:pointer; font-size:1.1rem; display:flex; align-items:center; justify-content:center; transition:.2s; }
+        .rule-row .del-btn:hover { background:rgba(255,107,107,0.15); border-color:var(--flick); }
+        .add-rule-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:12px; background:var(--bg-3); border:1px dashed var(--border); color:var(--accent); border-radius:10px; cursor:pointer; font-weight:700; transition:.2s; }
+        .add-rule-btn:hover { border-color:var(--accent); background:rgba(124,108,240,0.05); }
+        .field { margin-top:14px; padding:12px 14px; background:var(--bg-0); border-radius:10px; display:flex; align-items:center; gap:10px; }
+        .field label { font-size:.9rem; flex-shrink:0; color:var(--text-2); }
+        .field select { flex:1; background:transparent; color:var(--text); border:none; outline:none; font-size:.9rem; cursor:pointer; }
+        .field select option { background:var(--bg-2); color:var(--text); }
+        .shield { margin-top:12px; padding:14px; border-radius:10px; display:flex; align-items:center; gap:12px; background:rgba(255,107,107,.06); border:1px solid rgba(255,107,107,.15); cursor:pointer; transition:.2s; user-select:none; }
+        .shield:hover { background:rgba(255,107,107,.1); border-color:rgba(255,107,107,.25); }
+        .shield input { width:20px; height:20px; flex-shrink:0; cursor:pointer; }
+        /* 屏蔽长条是警示项，勾选框用红色跟普通项区分（accent-color 对自绘无效） */
+        .shield input[type="checkbox"]:checked {
+            background:linear-gradient(135deg, var(--flick), #ffa8a8);
+            border-color:var(--flick); box-shadow:0 0 12px rgba(255,107,107,.35);
+        }
+        .shield .t { font-weight:700; font-size:.9rem; color:var(--flick); }
+        .shield .d { font-size:.8rem; color:var(--text-2); margin-top:2px; }
+        .feat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+        .feat-btn {
+            padding:14px 10px; background:var(--bg-0); border:1px solid var(--border); border-radius:10px;
+            color:var(--text); font-size:.88rem; cursor:pointer; transition:.2s;
+            display:flex; flex-direction:column; align-items:center; gap:6px; user-select:none;
+        }
+        .feat-btn:hover { border-color:var(--border-hover); background:rgba(255,255,255,.03); transform:translateY(-1px); }
+        .feat-btn.active { border-color:var(--accent); background:rgba(124,108,240,.1); box-shadow:0 0 20px rgba(124,108,240,.15); }
+        .feat-btn .em { font-size:1.4rem; line-height:1; }
+
+        /* ===== 自绘下拉：替代原生 select =====
+           原生 select 在手机上会弹出系统控件，桌面端各浏览器样式也不一致，
+           跟这套深色界面拼在一起很违和。这里保留原生 select 作为数据源
+           （加 .cmb-src 隐藏），只替换外观 —— 读 .value、监听 change 的既有代码全部照常。 */
+        .cmb { position:relative; flex:1; min-width:120px; }
+        .cmb-btn { width:100%; min-height:38px; display:flex; align-items:center; justify-content:space-between; gap:8px;
+            background:var(--bg-2); color:var(--text); border:1px solid var(--border); border-radius:8px;
+            padding:8px 10px; font-size:.85rem; font-family:inherit; text-align:left; cursor:pointer; outline:none; transition:.2s; }
+        .cmb-btn:hover { border-color:var(--border-hover); background:var(--bg-3); }
+        .cmb.open .cmb-btn { border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,108,240,.14); }
+        .cmb-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .cmb-arrow { flex-shrink:0; font-size:.6rem; color:var(--text-2); transition:transform .2s; }
+        .cmb.open .cmb-arrow { transform:rotate(180deg); color:var(--accent-2); }
+        .cmb-list { position:absolute; top:calc(100% + 5px); left:0; right:0; z-index:80;
+            background:var(--bg-1); border:1px solid var(--border); border-radius:10px; padding:5px;
+            box-shadow:var(--shadow); max-height:240px; overflow-y:auto; display:none; }
+        .cmb.open .cmb-list { display:block; animation:cmbIn .16s ease; }
+        @keyframes cmbIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+        .cmb-opt { display:flex; align-items:center; justify-content:space-between; gap:8px;
+            padding:9px 10px; border-radius:7px; font-size:.85rem; color:var(--text); cursor:pointer; }
+        .cmb-opt:hover, .cmb-opt.on { background:var(--bg-3); }
+        .cmb-opt.sel { color:var(--accent-2); background:rgba(124,108,240,.12); font-weight:600; }
+        .cmb-opt.dis { opacity:.38; cursor:not-allowed; }
+        .cmb-opt.dis:hover { background:transparent; }
+        .cmb-check { font-size:.75rem; flex-shrink:0; opacity:0; }
+        .cmb-opt.sel .cmb-check { opacity:1; }
+        /* 原生 select 留在 DOM 里供取值，视觉上隐藏 */
+        select.cmb-src { position:absolute; width:1px; height:1px; padding:0; border:0; opacity:0; pointer-events:none; }
+        .cmb-list::-webkit-scrollbar { width:6px; }
+        .cmb-list::-webkit-scrollbar-thumb { background:var(--border-hover); border-radius:3px; }
+        .cmb-list::-webkit-scrollbar-track { background:transparent; }
+
+        /* ===== 统计卡片里的噪域概览 ===== */
+        .block-stat { margin-top:14px; padding:12px 14px; border-radius:12px;
+            background:var(--bg-0); border:1px solid var(--border); }
+        .bs-head { display:flex; align-items:baseline; justify-content:space-between; margin-bottom:9px; }
+        .bs-title { font-size:.78rem; font-weight:700; color:var(--text-2); letter-spacing:.06em; text-transform:uppercase; }
+        .bs-total { font-size:1.3rem; font-weight:800; color:var(--accent-2); line-height:1; }
+        .bs-bar { display:flex; height:8px; border-radius:4px; overflow:hidden; background:var(--bg-2); gap:1px; }
+        .bs-fill { height:100%; transition:width .5s cubic-bezier(.4,0,.2,1); }
+        .bs-fill.add { background:var(--accent-2); }
+        .bs-fill.sub { background:var(--accent); }
+        .bs-legend { display:flex; flex-wrap:wrap; gap:14px; margin-top:9px; font-size:.75rem; color:var(--text-2); }
+        .bs-legend > span { display:flex; align-items:center; gap:5px; }
+        .bs-legend i { width:9px; height:9px; border-radius:2px; flex-shrink:0; }
+        .bs-legend b { color:var(--text); font-weight:700; }
+        .bs-empty { font-size:.78rem; color:var(--text-2); display:flex; align-items:center; gap:7px; }
+        .bs-empty::before { content:''; width:9px; height:9px; border-radius:2px; background:var(--bg-2); border:1px solid var(--border); flex-shrink:0; }
+        .actions { display:flex; gap:12px; flex-wrap:wrap; margin-top:4px; }
+        .btn { flex:1; min-width:160px; padding:14px 20px; border-radius:12px; border:none; font-size:.95rem; font-weight:700; cursor:pointer; transition:.25s; display:inline-flex; align-items:center; justify-content:center; gap:8px; user-select:none; }
+        .btn-prim { background:linear-gradient(135deg, #7c6cf0, #a78bfa); color:#fff; box-shadow:0 10px 30px rgba(124,108,240,.35); }
+        .btn-prim:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 14px 40px rgba(124,108,240,.45); }
+        .btn-prim:disabled { opacity:.5; cursor:not-allowed; }
+        .btn-sec { background:var(--bg-2); color:var(--text); border:1px solid var(--border); }
+        .btn-sec:hover { border-color:var(--border-hover); background:var(--bg-3); }
+        .overlay {
+            position:fixed; inset:0; z-index:100; background:rgba(7,7,10,.85); backdrop-filter:blur(12px);
+            display:none; align-items:center; justify-content:center; opacity:0; transition:opacity .3s ease;
+        }
+        .overlay.on { display:flex; opacity:1; }
+        .modal {
+            width:min(90%,420px); background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius);
+            padding:36px 28px; text-align:center; box-shadow:var(--shadow); transform:scale(.96); transition:transform .3s ease;
+        }
+        .overlay.on .modal { transform:scale(1); }
+        .modal .pct { font-size:2.6rem; font-weight:900; background:linear-gradient(135deg, #a78bfa, #60c8ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; line-height:1; margin-bottom:6px; }
+        .modal .status { color:var(--text-2); font-size:.95rem; margin-bottom:24px; }
+        .track { height:8px; background:var(--bg-0); border-radius:100px; overflow:hidden; margin-bottom:10px; }
+        .bar { height:100%; width:0%; border-radius:100px; background:linear-gradient(90deg, #7c6cf0, #60c8ff); transition:width .25s ease; position:relative; overflow:hidden; }
+        .bar::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, transparent, rgba(255,255,255,.25), transparent); animation:shimmer 1.4s infinite; }
+        .modal .detail { font-size:.85rem; color:var(--text-2); margin-top:4px; }
+        .canvas-overlay {
+            position:fixed; inset:0; z-index:150; background:rgba(7,7,10,0.95); backdrop-filter:blur(20px);
+            display:none; align-items:center; justify-content:center; flex-direction:column;
+        }
+        .canvas-overlay.on { display:flex; }
+        .canvas-overlay .close-btn {
+            position:absolute; top:24px; right:24px; background:var(--bg-1); border:1px solid var(--border);
+            color:var(--text); width:48px; height:48px; border-radius:50%; cursor:pointer; font-size:1.5rem;
+            display:flex; align-items:center; justify-content:center; transition:.2s; z-index:10;
+        }
+        .canvas-overlay .close-btn:hover { background:var(--bg-2); border-color:var(--border-hover); }
+        .canvas-overlay canvas { width:95%; height:80%; border-radius:12px; background:var(--bg-0); }
+        .toast {
+            position:fixed; bottom:24px; right:24px; z-index:200; background:var(--bg-1); border:1px solid var(--border);
+            border-radius:12px; padding:14px 18px; box-shadow:var(--shadow); display:none; align-items:center;
+            gap:12px; max-width:360px; animation:slideIn .35s ease both;
+        }
+        .toast.on { display:flex; }
+        .toast .icon { font-size:1.3rem; flex-shrink:0; }
+        .toast .body { flex:1; }
+        .toast .title { font-weight:700; font-size:.92rem; }
+        .toast .msg { font-size:.85rem; color:var(--text-2); margin-top:1px; }
+
+        /* 禁用样式 */
+        select:disabled, button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .add-rule-btn:disabled { opacity: 0.4; pointer-events: none; }
+
+        @keyframes fadeDown { from { opacity:0; transform:translateY(-16px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes shimmer { 0% { transform:translateX(-100%); } 100% { transform:translateX(100%); } }
+        @keyframes slideIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }
+    </style>
+    <style>
+        /* ===== 批量上传 + 整合功能 ===== */
+        .batch-panel { margin-top: 14px; }
+        .batch-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+        .batch-head .bt { font-size: 15px; font-weight: 700; color: #fff; }
+        .batch-head .bc { font-size: 12px; color: #94a3b8; }
+        .batch-head .bbtn { padding: 6px 12px; font-size: 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16); background: transparent; color: #cbd5e1; cursor: pointer; font-family: inherit; }
+        .batch-head .bbtn:hover { border-color: var(--accent); color: var(--accent); }
+        .batch-head .bbtn.danger:hover { border-color: #f87171; color: #f87171; }
+        .chart-list { display: flex; flex-direction: column; gap: 8px; }
+        .chart-item {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 10px 12px; border-radius: 10px;
+            border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.03);
+            transition: border-color .18s, background .18s;
+        }
+        .chart-item.is-main { border-color: var(--accent); background: rgba(34,211,238,.08); }
+        .chart-item .ci-chk { width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; margin: 0; }
+        .chart-item .ci-label {
+            width: 74px; flex-shrink: 0; padding: 6px 8px; font-size: 13px; font-weight: 700;
+            text-align: center; border-radius: 7px; border: 1px solid rgba(255,255,255,.16);
+            background: rgba(0,0,0,.25); color: #fff; font-family: inherit; outline: none;
+        }
+        .chart-item .ci-label:focus { border-color: var(--accent); }
+        .chart-item .ci-name { flex: 1; min-width: 0; font-size: 13px; color: #e2e8f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chart-item .ci-meta { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
+        .chart-item .ci-main-btn {
+            flex-shrink: 0; padding: 5px 10px; font-size: 12px; border-radius: 7px;
+            border: 1px solid rgba(255,255,255,.16); background: transparent; color: #cbd5e1; cursor: pointer; font-family: inherit;
+        }
+        .chart-item .ci-main-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .chart-item.is-main .ci-main-btn { background: var(--accent); color: #062b32; border-color: var(--accent); font-weight: 700; cursor: default; }
+        .chart-item .ci-del { flex-shrink: 0; width: 28px; height: 28px; padding: 0; border-radius: 7px; border: none; background: transparent; color: #94a3b8; font-size: 15px; cursor: pointer; line-height: 1; }
+        .chart-item .ci-del:hover { color: #f87171; background: rgba(248,113,113,.14); }
+        /* 整合 / 批量面板的通用行、提示与输入框。
+           原先这些样式挂在 .merge-opts 前缀下，批量面板里用同样的类名却拿不到样式，
+           只能靠内联 style 硬凑，色值也写成另一套（黑底白字 + 高亮边框），
+           跟主界面的 --bg-2 / --border / --text 不一致 —— 这里提成通用类并统一走变量。 */
+        .merge-opts { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+        .mo-row { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; flex-wrap: wrap; }
+        .mo-row > label { font-size: 12px; color: var(--text-2); flex-shrink: 0; }
+        .mo-tip { font-size: 11px; color: var(--text-2); line-height: 1.55; margin-top: 6px; }
+        .mo-field {
+            padding: 7px 10px; font-size: 13px; border-radius: 7px;
+            border: 1px solid var(--border); background: var(--bg-2);
+            color: var(--text); font-family: inherit; outline: none; transition: .2s;
+        }
+        .mo-field:hover { border-color: var(--border-hover); }
+        .mo-field:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,108,240,.14); }
+        .mo-row input[type="number"].mo-field { width: 84px; }
+        /* 整行的勾选框：原生 checkbox 在深色底上是白底方块，很跳，统一自绘 */
+        .mo-row.mo-check { cursor: pointer; }
+        .mo-row.mo-check > span { font-size: 12px; color: var(--text); }
+        input[type="checkbox"] {
+            appearance: none; -webkit-appearance: none; -moz-appearance: none;
+            width: 18px; height: 18px; flex-shrink: 0; margin: 0; cursor: pointer;
+            background: var(--bg-2); border: 1px solid var(--border); border-radius: 5px;
+            position: relative; outline: none; transition: .18s;
+        }
+        input[type="checkbox"]:hover { border-color: var(--border-hover); }
+        input[type="checkbox"]:checked {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            border-color: var(--accent); box-shadow: 0 0 12px rgba(124,108,240,.35);
+        }
+        input[type="checkbox"]:checked::after {
+            content: ''; position: absolute; left: 5px; top: 1px;
+            width: 5px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px rgba(124,108,240,.2); }
+        /* 列表里的勾选框沿用同一套自绘外观（原先只设了 accent-color，未选中时仍是白底） */
+        .chart-item .ci-chk { width: 18px; height: 18px; flex-shrink: 0; cursor: pointer; margin: 0; }
+        @media (max-width: 600px) {
+            .chart-item { padding: 9px 10px; gap: 8px; }
+            .chart-item .ci-name { flex: 1 1 100%; order: 2; }
+            .chart-item .ci-meta { order: 3; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay"><div class="spinner"></div></div>
+
+    <div id="error-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-title" id="error-title">访问受限</div>
+            <div class="modal-msg" id="error-message"></div>
+            <div id="error-details" class="error-details"></div>
+            <div class="modal-btn-group">
+                <button id="back-btn" class="btn-secondary">返回答题页</button>
+                <button id="reload-btn" class="btn-primary">刷新重试</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="ambient"></div>
+    <div class="wrap" id="main-content" style="display: none;">
+        <!-- PTH 二次开发：返回导航中心 -->
+        <a class="pth-back" href="/" aria-label="返回导航中心">
+            <span class="pth-back-ico" aria-hidden="true">←</span>
+            <span class="pth-back-txt">返回导航</span>
+        </a>
+        <header class="brand">
+            <h1>Phigros Chart Studio</h1>
+            <p>谱面统计 · 动态替换 · ZIP 难度自动更新</p>
+        </header>
+
+        <div class="uploader" id="dropZone">
+            <input type="file" id="fileInput" accept=".json,.zip,.pez,application/json,application/zip" multiple>
+            <div class="uploader-icon">📂</div>
+            <h3>点击或拖拽上传谱面 JSON / ZIP / PEZ</h3>
+            <span>支持批量上传：压缩包套压缩包会自动展开，同一首歌的多个难度可一次选中后用「整合」混排</span>
+            <div class="file-chip" id="fileChip">
+                <span>✓</span>
+                <span id="fileChipText">未选择文件</span>
+            </div>
+        </div>
+
+        <div class="card batch-panel" id="batchPanel" style="display:none">
+            <div class="card-head"><div class="dot" style="background:var(--accent);color:var(--accent)"></div>已载入谱面</div>
+            <div class="batch-head">
+                <span class="bc" id="batchCount"></span>
+                <span style="flex:1"></span>
+                <button type="button" class="bbtn" id="addMoreBtn">＋ 继续添加</button>
+                <button type="button" class="bbtn danger" id="clearAllBtn">清空</button>
+            </div>
+            <div class="chart-list" id="chartList"></div>
+            <div class="mo-tip">
+                ☑ 勾选 = 参与整合　·　点「设为主谱面」指定基准（决定 BPM、背景、判定线来源）
+            </div>
+            <label class="mo-row mo-check" title="不整合时，把每张勾选的谱面各自处理并打包成一个压缩包">
+                <input type="checkbox" id="splitOutput">
+                <span>分别处理所有勾选谱面，打包成一个压缩包</span>
+            </label>
+            <div class="mo-row" id="blockAreaRow">
+                <label>噪域</label>
+                <select id="blockAreaMode">
+                    <option value="keep">保留原样（不改动）</option>
+                    <option value="merge">整合时合并所有谱面并去重</option>
+                    <option value="main">整合时只保留主谱面</option>
+                    <option value="none">删除所有噪域</option>
+                </select>
+            </div>
+            <div class="mo-tip" id="blockAreaTip"></div>
+        </div>
+
+        <div id="emptyBox">
+            <div class="card" style="margin-top:20px">
+                <div class="empty"><span class="em">🎼</span><div>请先上传谱面文件以开始处理</div></div>
+            </div>
+        </div>
+
+        <div class="workspace" id="workspace">
+            <div class="row">
+                <div class="card">
+                    <div class="card-head"><div class="dot" style="background:var(--accent);color:var(--accent)"></div>谱面统计</div>
+                    <div class="stat-grid">
+                        <div class="stat-cell tap"><div class="stat-num" id="sTap">0</div><div class="stat-label">Tap 蓝键</div><div class="stat-pct" id="pTap">0%</div></div>
+                        <div class="stat-cell drag"><div class="stat-num" id="sDrag">0</div><div class="stat-label">Drag 黄键</div><div class="stat-pct" id="pDrag">0%</div></div>
+                        <div class="stat-cell flick"><div class="stat-num" id="sFlick">0</div><div class="stat-label">Flick 红键</div><div class="stat-pct" id="pFlick">0%</div></div>
+                        <div class="stat-cell hold"><div class="stat-num" id="sHold">0</div><div class="stat-label">Hold 长条</div><div class="stat-pct" id="pHold">0%</div></div>
+                    </div>
+                    <div class="total-pill"><div class="n" id="sTotal">0</div><div class="l">总物量</div></div>
+                    <div class="block-stat" id="blockStat">
+                        <div class="bs-head">
+                            <span class="bs-title">噪域 BlockArea</span>
+                            <span class="bs-total" id="bsTotal">0</span>
+                        </div>
+                        <div id="bsBody" style="display:none">
+                            <div class="bs-bar">
+                                <div class="bs-fill add" id="bsAdd" style="width:0%"></div>
+                                <div class="bs-fill sub" id="bsSubBar" style="width:0%"></div>
+                            </div>
+                            <div class="bs-legend">
+                                <span><i style="background:var(--accent-2)"></i>遮挡 <b id="bsAddN">0</b></span>
+                                <span><i style="background:var(--accent)"></i>挖洞 <b id="bsSubN">0</b></span>
+                                <span>跨度 <b id="bsSpan">0:00</b></span>
+                            </div>
+                        </div>
+                        <div class="bs-empty" id="bsEmpty">当前谱面没有噪域</div>
+                    </div>
+                    <div class="dist-track" id="distTrack">
+                        <div class="dist-fill" id="dTap" style="width:0%;background:var(--tap)"></div>
+                        <div class="dist-fill" id="dDrag" style="width:0%;background:var(--drag)"></div>
+                        <div class="dist-fill" id="dFlick" style="width:0%;background:var(--flick)"></div>
+                        <div class="dist-fill" id="dHold" style="width:0%;background:var(--hold)"></div>
+                    </div>
+                    <div class="mini-canvas-wrap" id="miniCanvasWrap"><canvas id="timeCanvas"></canvas><div class="cap">节拍分布预览 (点击放大)</div></div>
+                </div>
+                <div class="card">
+                    <div class="card-head"><div class="dot" style="background:var(--flick);color:var(--flick)"></div>替换规则</div>
+                    <div class="dynamic-rules" id="dynamicRules"></div>
+                    <button class="add-rule-btn" id="addRuleBtn">＋ 添加替换规则</button>
+                    <div class="field"><label>全局统一：</label><select id="globalSel">
+                        <option value="0">不统一</option>
+                        <option value="1">全部转为 Tap</option>
+                        <option value="2">全部转为 Drag</option>
+                        <option value="4">全部转为 Flick</option>
+                        <option value="3">全部转为 Hold</option>
+                    </select></div>
+                    <label class="shield">
+                        <input type="checkbox" id="shieldHold">
+                        <div>
+                            <div class="t">🛡️ 屏蔽长条 (Hold)</div>
+                            <div class="d">常规替换时保留 Hold 不变</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="card">
+                    <div class="card-head"><div class="dot" style="background:var(--hold);color:var(--hold)"></div>高级功能</div>
+                    <div class="feat-grid">
+                        <button class="feat-btn" data-feat="random"><span class="em">🎲</span><span>随机</span></button>
+                        <button class="feat-btn" data-feat="merge"><span class="em">🧩</span><span>整合</span></button>
+                    </div>
+                    <div id="randomShieldWrap" style="display:none; margin-top:12px;">
+                        <label class="shield">
+                            <input type="checkbox" id="randomShieldHold">
+                            <div>
+                                <div class="t">🛡️ 随机屏蔽长条 (Hold)</div>
+                                <div class="d">随机替换时保留 Hold 不变</div>
+                            </div>
+                        </label>
+                    </div>
+                    <div id="mergeWrap" style="display:none; margin-top:12px;">
+                        <div class="merge-opts">
+                            <div class="mo-row">
+                                <label>混排方式</label>
+                                <select id="mergeModeSel">
+                                    <option value="even">平均开来（各难度轮流交替）</option>
+                                    <option value="random">随机插入（每段纯随机）</option>
+                                </select>
+                            </div>
+                            <div class="mo-row">
+                                <label>分段数</label>
+                                <input type="number" id="segCount" class="mo-field" value="16" min="2" max="512" step="1">
+                                <span class="mo-tip">把全曲按时间切成 N 段，每段取一个难度</span>
+                            </div>
+                            <div class="mo-row">
+                                <label class="shield" style="flex:1 1 200px; min-width:200px">
+                                    <input type="checkbox" id="dedupeLines" checked>
+                                    <div>
+                                        <div class="t">🧬 合并相同判定线</div>
+                                        <div class="d">各难度共用的判定线只保留一条</div>
+                                    </div>
+                                </label>
+                            </div>
+                            <div class="mo-tip" id="mergeTip"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="btn btn-prim" id="processBtn">▶ 处理并下载</button>
+                <button class="btn btn-sec" id="resetBtn">↺ 重置规则</button>
+                <button class="btn btn-sec" id="reportBtn">📄 导出报告</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+        <div class="modal">
+            <div class="pct" id="progPct">0%</div>
+            <div class="status" id="progStatus">准备处理…</div>
+            <div class="track"><div class="bar" id="progBar"></div></div>
+            <div class="detail" id="progDetail">初始化中</div>
+        </div>
+    </div>
+
+    <div class="canvas-overlay" id="canvasOverlay">
+        <button class="close-btn" id="closeCanvasBtn">✕</button>
+        <canvas id="largeTimeCanvas"></canvas>
+    </div>
+
+    <div class="toast" id="toast">
+        <div class="icon" id="toastIcon">✅</div>
+        <div class="body"><div class="title" id="toastTitle">提示</div><div class="msg" id="toastMsg">操作成功</div></div>
+    </div>
+
+    <script>
+        (function() {
+            document.addEventListener('contextmenu', e => e.preventDefault());
+            ['copy', 'cut', 'paste', 'selectstart'].forEach(evt => {
+                document.addEventListener(evt, e => { e.preventDefault(); return false; });
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key.toUpperCase())) || (e.ctrlKey && e.key.toLowerCase() === 'u')) {
+                    e.preventDefault();
+                }
+            });
+        })();
+
+        function simpleHash(str) {
+            let hash = 5381;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) + hash) + str.charCodeAt(i);
+            }
+            return (hash >>> 0).toString(16);
+        }
+
+        async function verifyAccess() {
+            const token = localStorage.getItem('access_token');
+            if (!token) throw new Error('无凭证信息');
+            let parts;
+            try {
+                const payloadStr = atob(token);
+                parts = payloadStr.split('|');
+            } catch (e) { throw new Error('凭证格式损坏'); }
+            if (parts.length !== 3) throw new Error('凭证结构错误');
+            const timestamp = parseInt(parts[0], 10);
+            const uid = parts[1];
+            const providedSig = parts[2];
+            const now = Date.now();
+            const expirationTime = timestamp + (12 * 60 * 60 * 1000);
+            if (now > expirationTime) {
+                localStorage.removeItem('access_token');
+                throw new Error('凭证已过期 (超过12小时)');
+            }
+            const signString = `${timestamp}|${uid}`;
+            const expectedSig = simpleHash(signString);
+            if (providedSig !== expectedSig) throw new Error('签名校验失败 (凭证可能被篡改)');
+            return true;
+        }
+
+        function hideLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            overlay.style.opacity = '0';
+            overlay.style.visibility = 'hidden';
+            setTimeout(() => { if (overlay.style.visibility === 'hidden') overlay.style.display = 'none'; }, 300);
+        }
+
+        function showAuthError(msg) {
+            document.getElementById('error-title').innerText = '访问受限';
+            document.getElementById('error-message').innerText = msg;
+            document.getElementById('error-details').innerText = '请先完成答题验证后再访问此页面。';
+            document.getElementById('error-details').style.display = 'block';
+            document.getElementById('error-modal').classList.add('active');
+            document.getElementById('main-content').style.display = 'none';
+            hideLoading();
+        }
+
+        (async function init() {
+            try { await verifyAccess(); }
+            catch (err) { showAuthError(err.message); return; }
+            document.getElementById('main-content').style.display = 'block';
+            hideLoading();
+
+            (function() {
+                'use strict';
+                const typeNames = { 1: 'Tap', 2: 'Drag', 3: 'Hold', 4: 'Flick' };
+                const typeOptions = [
+                    { value: 1, label: '蓝键 (Tap)' },
+                    { value: 2, label: '黄键 (Drag)' },
+                    { value: 4, label: '红键 (Flick)' },
+                    { value: 3, label: '长条 (Hold)' }
+                ];
+                let chartData = null, fileName = 'chart.json', statsCache = null;
+                // 当前主谱面的输出扩展名。导入 .pez 就必须导出 .pez，
+                // 否则 Phira 认不出来（.pez 本质就是改了扩展名的 zip）
+                let currentExt = '.json';
+                // 当前主谱面的歌曲名与原始难度，供输出命名使用
+                let currentSong = '', currentDiff = '';
+                let zipImportData = null, zipJsonPath = null, isZipImport = false;
+
+                const $ = s => document.querySelector(s);
+                const $$ = s => Array.from(document.querySelectorAll(s));
+
+                const dropZone = $('#dropZone'), fileInput = $('#fileInput'), fileChip = $('#fileChip'), fileChipText = $('#fileChipText');
+                const emptyBox = $('#emptyBox'), workspace = $('#workspace');
+                const processBtn = $('#processBtn'), resetBtn = $('#resetBtn'), reportBtn = $('#reportBtn');
+                const globalSel = $('#globalSel');
+                const shieldHold = $('#shieldHold');
+                const overlay = $('#overlay'), progPct = $('#progPct'), progStatus = $('#progStatus'), progBar = $('#progBar'), progDetail = $('#progDetail');
+                const toast = $('#toast');
+                const dynamicRules = $('#dynamicRules');
+                const addRuleBtn = $('#addRuleBtn');
+                const miniCanvasWrap = $('#miniCanvasWrap');
+                const canvasOverlay = $('#canvasOverlay');
+                const closeCanvasBtn = $('#closeCanvasBtn');
+                const randomBtn = $('[data-feat="random"]');
+                const randomShieldWrap = $('#randomShieldWrap');
+                const randomShieldHold = $('#randomShieldHold');
+                const mergeBtn = $('[data-feat="merge"]');
+                const mergeWrap = $('#mergeWrap');
+                const mergeModeSel = $('#mergeModeSel');
+                const segCount = $('#segCount');
+                const dedupeLines = $('#dedupeLines');
+                const mergeTip = $('#mergeTip');
+                const splitOutput = $('#splitOutput');
+                const blockAreaMode = $('#blockAreaMode');
+                const blockAreaTip = $('#blockAreaTip');
+                const chartList = $('#chartList');
+                const batchPanel = $('#batchPanel');
+                const batchCount = $('#batchCount');
+
+                // 批量谱面：{ id, name, label, data, zip, include, isMain }
+                let charts = [];
+                let nextChartId = 1;
+
+                function resetZipState() { zipImportData = null; zipJsonPath = null; isZipImport = false; }
+
+                // 根据模式更新控件禁用状态
+                /** 统计噪域的构成：加算 / 减算数量与覆盖时间跨度 */
+                function blockAreaStats(data) {
+                    const list = getBlockAreas(data);
+                    if (list.length === 0) return null;
+                    let sub = 0, lo = Infinity, hi = -Infinity;
+                    list.forEach(a => {
+                        if (a.isSubtract) sub++;
+                        const t0 = Number(a.appearTime), t1 = Number(a.disappearTime);
+                        if (isFinite(t0) && t0 < lo) lo = t0;
+                        if (isFinite(t1) && t1 > hi) hi = t1;
+                    });
+                    return {
+                        total: list.length,
+                        sub: sub,
+                        add: list.length - sub,
+                        span: (isFinite(lo) && isFinite(hi)) ? (hi - lo) : 0,
+                    };
+                }
+
+                /** 下方实时说明：噪域那一行 */
+                function renderBlockAreaTip() {
+                    if (!blockAreaTip || !blockAreaMode) return;
+                    const total = charts.reduce((n, c) => n + countBlockAreas(c.data), 0);
+                    if (total === 0) {
+                        blockAreaTip.textContent = '当前谱面没有噪域（blockAreaList），此项无影响';
+                        return;
+                    }
+                    // 展示构成：减算（挖洞）与加算（遮挡）数量不同，视觉效果差别很大
+                    const st = charts.map(c => blockAreaStats(c.data)).filter(Boolean);
+                    const sub = st.reduce((n, x) => n + x.sub, 0);
+                    const add = st.reduce((n, x) => n + x.add, 0);
+                    const span = Math.max(...st.map(x => x.span), 0);
+                    const map = {
+                        keep: '原样保留，整合时随主谱面带过去',
+                        merge: '把所有谱面的噪域合并并去重，视觉最完整，但数量可能变多',
+                        main: '整合时只保留主谱面的噪域，其他难度的会被丢弃',
+                        none: '删除全部噪域，输出干净的谱面',
+                    };
+                    blockAreaTip.textContent =
+                        `共 ${total} 个（遮挡 ${add} · 挖洞 ${sub}）· 跨度约 ${fmtSpan(span)} · ${map[blockAreaMode.value] || ''}`;
+                }
+
+                /** 秒 → m:ss */
+                function fmtSpan(sec) {
+                    const t = Math.max(0, Math.round(Number(sec) || 0));
+                    return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+                }
+
+                /** 统计卡片里的噪域概览：数量、遮挡/挖洞构成、覆盖跨度 */
+                function updateBlockStat() {
+                    const body = $('#bsBody'), empty = $('#bsEmpty');
+                    if (!body || !empty) return;
+                    const st = blockAreaStats(chartData);
+                    if (!st || st.total === 0) {
+                        body.style.display = 'none';
+                        empty.style.display = '';
+                        const t = $('#bsTotal'); if (t) t.textContent = '0';
+                        return;
+                    }
+                    body.style.display = '';
+                    empty.style.display = 'none';
+                    animateInt($('#bsTotal'), st.total);
+                    const a = $('#bsAddN'), b = $('#bsSubN'), sp = $('#bsSpan');
+                    if (a) a.textContent = st.add;
+                    if (b) b.textContent = st.sub;
+                    if (sp) sp.textContent = fmtSpan(st.span);
+                    const pa = $('#bsAdd'), pb = $('#bsSubBar');
+                    if (pa) pa.style.width = (st.total ? (st.add / st.total) * 100 : 0) + '%';
+                    if (pb) pb.style.width = (st.total ? (st.sub / st.total) * 100 : 0) + '%';
+                }
+
+                /** ================= 自绘下拉（替代原生 select）=================
+                 * 原生 select 在手机端会弹出系统控件，桌面端各浏览器渲染差异也很大，
+                 * 放在深色界面里很跳。这里保留原生 select 作为数据源（加 .cmb-src 隐藏），
+                 * 只替换外观：读 .value、监听 change 的既有代码一行都不用改。
+                 */
+
+                /** 同时只展开一个下拉 */
+                function closeCombos(exceptWrap) {
+                    document.querySelectorAll('.cmb.open').forEach(el => {
+                        if (el !== exceptWrap) el.classList.remove('open');
+                    });
+                }
+
+                function initCombobox(sel) {
+                    if (!sel || sel.classList.contains('cmb-src')) return;
+                    sel.classList.add('cmb-src');
+
+                    const wrap = document.createElement('div');
+                    wrap.className = 'cmb';
+
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'cmb-btn';
+                    btn.setAttribute('aria-haspopup', 'listbox');
+                    const label = document.createElement('span');
+                    label.className = 'cmb-label';
+                    const arrow = document.createElement('span');
+                    arrow.className = 'cmb-arrow';
+                    arrow.textContent = '\u25BC';
+                    btn.append(label, arrow);
+
+                    const list = document.createElement('div');
+                    list.className = 'cmb-list';
+                    list.setAttribute('role', 'listbox');
+
+                    wrap.append(btn, list);
+                    sel.parentNode.insertBefore(wrap, sel);
+
+                    const items = [];
+                    Array.from(sel.options).forEach((o, i) => {
+                        const el = document.createElement('div');
+                        el.className = 'cmb-opt';
+                        el.setAttribute('role', 'option');
+                        const t = document.createElement('span');
+                        t.textContent = o.textContent;
+                        const ck = document.createElement('span');
+                        ck.className = 'cmb-check';
+                        ck.textContent = '\u2713';
+                        el.append(t, ck);
+                        el.addEventListener('click', () => {
+                            // 被禁用的选项不可选，保持原生 select 的约束
+                            if (sel.options[i] && sel.options[i].disabled) return;
+                            sel.selectedIndex = i;
+                            // 触发 change，让页面原有的监听器照常工作
+                            sel.dispatchEvent(new Event('change', { bubbles: true }));
+                            // 联动改动（如规则行改了一个，另一个的可选项会变）也要反映到界面
+                            syncCombos();
+                            closeCombos(null);
+                        });
+                        list.appendChild(el);
+                        items.push(el);
+                    });
+
+                    const syncLabel = () => {
+                        // 直接读 options[selectedIndex]：selectedOptions 在部分环境下
+                        // 不会随 selectedIndex 立即同步，用它取会拿到上一次的旧项
+                        const idx = sel.selectedIndex;
+                        const o = (idx >= 0 && idx < sel.options.length) ? sel.options[idx] : null;
+                        label.textContent = o ? o.textContent : '';
+                        items.forEach((el, i) => {
+                            const opt = sel.options[i];
+                            const on = i === idx;
+                            const dis = !!(opt && opt.disabled);
+                            el.classList.toggle('sel', on);
+                            el.classList.toggle('dis', dis);
+                            el.setAttribute('aria-selected', on ? 'true' : 'false');
+                            el.setAttribute('aria-disabled', dis ? 'true' : 'false');
+                        });
+                    };
+                    // 挂到 select 上：外部改了 .value 后可手动同步显示，不必伪造 change 事件
+                    sel.__cmbSync = syncLabel;
+
+                    let hi = -1;
+                    const highlight = (n) => {
+                        if (!items.length) return;
+                        hi = (n + items.length) % items.length;
+                        items.forEach((el, i) => el.classList.toggle('on', i === hi));
+                        if (items[hi].scrollIntoView) items[hi].scrollIntoView({ block: 'nearest' });
+                    };
+
+                    const close = () => { wrap.classList.remove('open'); hi = -1; };
+                    const open = () => {
+                        closeCombos(wrap);
+                        wrap.classList.add('open');
+                        highlight(sel.selectedIndex >= 0 ? sel.selectedIndex : 0);
+                    };
+
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        wrap.classList.contains('open') ? close() : open();
+                    });
+
+                    btn.addEventListener('keydown', (e) => {
+                        const opened = wrap.classList.contains('open');
+                        if (!opened) {
+                            if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault(); open();
+                            }
+                            return;
+                        }
+                        if (e.key === 'ArrowDown') { e.preventDefault(); highlight(hi + 1); }
+                        else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(hi - 1); }
+                        else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (items[hi]) items[hi].click(); }
+                        else if (e.key === 'Escape') { e.preventDefault(); close(); btn.focus(); }
+                        else if (e.key === 'Tab') close();
+                    });
+
+                    // 代码直接改 select.value 时（如重置），把显示同步回来
+                    sel.addEventListener('change', syncLabel);
+                    syncLabel();
+                    return wrap;
+                }
+
+                /**
+                 * 把所有自绘下拉的显示同步到其 select 的当前值。
+                 * 直接调 syncLabel 而不是派发 change —— 后者会连带触发页面原有的
+                 * 监听器（重置选项时并不希望它们跑一遍）。
+                 */
+                function syncCombos() {
+                    document.querySelectorAll('select.cmb-src').forEach(sel => {
+                        if (typeof sel.__cmbSync === 'function') sel.__cmbSync();
+                    });
+                }
+
+                /** 把容器内所有未处理的原生 select 换成自绘下拉 */
+                function initComboboxes(root) {
+                    const scope = root || document;
+                    scope.querySelectorAll('select').forEach(el => {
+                        if (!el.classList.contains('cmb-src')) initCombobox(el);
+                    });
+                }
+
+                function updateModeControls() {
+                    const randomActive = randomBtn.classList.contains('active');
+                    const mergeActive = mergeBtn.classList.contains('active');
+                    const globalVal = globalSel.value;
+
+                    // 随机区域显示/隐藏
+                    if (randomActive) {
+                        randomShieldWrap.style.display = 'block';
+                    } else {
+                        randomShieldWrap.style.display = 'none';
+                        randomShieldHold.checked = false;
+                    }
+
+                    // 整合区域显示/隐藏
+                    mergeWrap.style.display = mergeActive ? 'block' : 'none';
+
+                    // 禁用逻辑：整合模式下替换规则依然可用（可叠加在整合结果上）
+                    if (randomActive) {
+                        setControlsDisabled(true, true);   // 禁用规则列表 + 全局
+                    } else {
+                        if (globalVal !== '0') {
+                            setControlsDisabled(true, false); // 禁用规则列表，全局不禁用
+                        } else {
+                            setControlsDisabled(false, false); // 全部启用
+                        }
+                    }
+                }
+
+                function setControlsDisabled(disableRules, disableGlobal) {
+                    dynamicRules.querySelectorAll('select').forEach(s => s.disabled = disableRules);
+                    addRuleBtn.disabled = disableRules;
+                    globalSel.disabled = disableGlobal;
+                }
+
+                function resetAllOptions() {
+                    globalSel.value = '0';
+                    dynamicRules.innerHTML = '';
+                    randomBtn.classList.remove('active');
+                    mergeBtn.classList.remove('active');
+                    shieldHold.checked = false;
+                    randomShieldHold.checked = false;
+                    // 直接改 .value 不会触发 change，手动把自绘下拉的显示同步回来
+                    syncCombos();
+                    updateModeControls(); // 恢复启用状态
+                }
+
+                // 事件绑定
+                dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-active'); });
+                dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-active'));
+                dropZone.addEventListener('drop', e => {
+                    e.preventDefault(); dropZone.classList.remove('drag-active');
+                    ingestFiles(e.dataTransfer.files);
+                });
+                dropZone.addEventListener('click', (e) => { if(e.target !== fileInput) fileInput.click(); });
+                fileInput.addEventListener('change', e => { ingestFiles(e.target.files); fileInput.value = ''; });
+
+                // .pez 本质就是改了扩展名的 zip，Phira 靠扩展名识别，这里必须一并认
+                function isZipFile(file) { const n = file.name.toLowerCase(); return n.endsWith('.zip') || n.endsWith('.pez') || file.type === 'application/zip'; }
+                function isJsonFile(file) { return file.name.toLowerCase().endsWith('.json') || file.type === 'application/json'; }
+
+                /** 批量导入：逐个解析，成功的追加到 charts，最后统一刷新 */
+                async function ingestFiles(fileList) {
+                    const files = Array.from(fileList || []);
+                    if (!files.length) return;
+                    let ok = 0;
+                    for (const f of files) {
+                        if (isZipFile(f)) { if (await handleZipFile(f)) ok++; }
+                        else if (isJsonFile(f)) { if (await handleJsonFile(f)) ok++; }
+                        else showToast('❌', '格式错误', f.name + ' 不是 .json / .zip / .pez');
+                    }
+                    if (!ok) return;
+                    refreshCharts();
+                    showToast('✅', '已载入 ' + ok + ' 张', charts.length > 1
+                        ? ('共 ' + charts.length + ' 张谱面，可点「整合」混排')
+                        : (charts[0] ? charts[0].name : ''));
+                }
+
+                /** 从文件名猜难度标签，猜不到就按序号 */
+                function guessLabel(name, idx) {
+                    const up = String(name || '').toUpperCase().replace(/\.(JSON|ZIP|PEZ)$/i, '');
+                    const m = up.match(/(?:^|[._\-\/\s])(EZ|EASY|HD|HARD|IN|INSANE|AT|ANOTHER|SP)(?:[._\-\/\s]|$)/);
+                    if (m) {
+                        const map = { EZ: 'EZ', EASY: 'EZ', HD: 'HD', HARD: 'HD', IN: 'IN', INSANE: 'IN', AT: 'AT', ANOTHER: 'AT', SP: 'SP' };
+                        return map[m[1]] || m[1];
+                    }
+                    return '谱面' + (idx + 1);
+                }
+
+                function countNotes(data) {
+                    let n = 0;
+                    (data.judgeLineList || []).forEach(l => { n += (l.notesAbove || []).length + (l.notesBelow || []).length; });
+                    return n;
+                }
+
+                /** ===================== 噪域（blockArea）=====================
+                 * Phigros 新版本新增的 blockAreaList：按两个对角坐标定义一个矩形区域，
+                 * 在 enable~disable 期间遮挡/裁剪屏幕（isSubtract 表示减算，即挖洞）。
+                 * 工坊过去完全不认识它，整合时会随主谱面整体带过来但无法控制，
+                 * 这里补上读取、合并去重与删除的能力。
+                 *
+                 * 单个 blockArea 的真实字段（以实谱为准）：
+                 *   topRightPercentage / bottomLeftPercentage  对角坐标 {x,y}，取值不限于 0~1
+                 *   appearTime / enableTime / disableTime / disappearTime  音乐时间（秒）
+                 *   isSubtract  减算（挖洞）标记
+                 *   rotateEvents / moveEvents / scaleEvents   动画关键帧
+                 *
+                 * ⚠️ 官方文档写的是 rotateEventsList / moveEventsList / scaleEventsList，
+                 * 但实谱里没有 List 后缀。照文档写会取到 undefined。
+                 * 目前只做搬运/去重/删除，无需读事件；将来若要编辑动画，务必用无后缀的名字。
+                 *
+                 * ⚠️ 噪域需要 formatVersion >= 3。老版本谱面整合进噪域后必须升版本，
+                 * 否则 Phira 认不出 blockAreaList（见 ensureFormatVersion）。
+                 */
+
+                /** 取出噪域列表，没有就返回空数组 */
+                function getBlockAreas(data) {
+                    return (data && Array.isArray(data.blockAreaList)) ? data.blockAreaList : [];
+                }
+
+                function countBlockAreas(data) {
+                    return getBlockAreas(data).length;
+                }
+
+                /**
+                 * 噪域的唯一键，用于合并去重。
+                 * 位置 + 四个时间点 + 是否减算都一致才认为是同一个；
+                 * 事件数组不参与（内容多且浮点多，逐字节比对极易误判为不同）。
+                 */
+                function blockAreaKey(a) {
+                    const num = (v) => {
+                        const n = Number(v);
+                        return isFinite(n) ? n.toFixed(3) : '';
+                    };
+                    const pt = (p) => (p ? (num(p.x) + ':' + num(p.y)) : ':');
+                    return [
+                        pt(a.topRightPercentage),
+                        pt(a.bottomLeftPercentage),
+                        num(a.appearTime), num(a.enableTime),
+                        num(a.disableTime), num(a.disappearTime),
+                        a.isSubtract ? 'sub' : 'add',
+                    ].join('|');
+                }
+
+                /**
+                 * 噪域是 formatVersion 3 才有的结构。
+                 * 若主谱面是老版本（1/2）而整合时合并进了噪域，
+                 * 版本号还停留在旧值的话，Phira 会认不出 blockAreaList —— 这里补上升级。
+                 */
+                function ensureFormatVersion(data) {
+                    if (!data || typeof data !== 'object') return data;
+                    const has = Array.isArray(data.blockAreaList) && data.blockAreaList.length > 0;
+                    if (!has) return data;
+                    const v = Number(data.formatVersion);
+                    if (!isFinite(v) || v < 3) data.formatVersion = 3;
+                    return data;
+                }
+
+                /**
+                 * 合并多张谱面的噪域并按上面的键去重。
+                 * 参数 mode：
+                 *   'main'  —— 只保留主谱面的（默认，视觉与主谱面一致）
+                 *   'merge' —— 全部合进来去重（最完整，但数量可能翻倍）
+                 *   'none'  —— 全部删除（输出干净谱面）
+                 */
+                function mergeBlockAreas(list, mode) {
+                    if (mode === 'none') return [];
+                    if (!Array.isArray(list) || list.length === 0) return [];
+                    let mainIdx = list.findIndex(c => c.isMain);
+                    if (mainIdx < 0) mainIdx = 0;
+                    // keep 与 main 都只取主谱面：keep 是「什么都不做」，
+                    // main 是「其他难度的噪域丢弃」，落到输出上结果一致
+                    if (mode === 'main' || mode === 'keep') {
+                        return JSON.parse(JSON.stringify(getBlockAreas(list[mainIdx].data)));
+                    }
+                    const seen = new Set();
+                    const out = [];
+                    // 主谱面优先，保证它自己的噪域不会因为重复而丢失
+                    const order = [list[mainIdx]].concat(list.filter((_, i) => i !== mainIdx));
+                    order.forEach(c => {
+                        getBlockAreas(c.data).forEach(a => {
+                            const k = blockAreaKey(a);
+                            if (seen.has(k)) return;
+                            seen.add(k);
+                            out.push(JSON.parse(JSON.stringify(a)));
+                        });
+                    });
+                    return out;
+                }
+
+                function addChart(name, data, zip) {
+                    if (!data || typeof data !== 'object') { showToast('❌', '格式错误', name + ' 内容为空'); return null; }
+                    if (!Array.isArray(data.judgeLineList)) { showToast('❌', '格式错误', name + ' 缺少 judgeLineList'); return null; }
+                    if (data.judgeLineList.length === 0) { showToast('⚠️', '空谱面', name + ' 没有判定线'); return null; }
+                    const item = {
+                        id: 'c' + (nextChartId++),
+                        name: name,
+                        srcName: name,
+                        ext: null,
+                        songName: '',
+                        label: guessLabel(name, charts.length),
+                        data: data,
+                        zip: zip || null,
+                        group: '',
+                        include: true,
+                        isMain: charts.length === 0
+                    };
+                    charts.push(item);
+                    return item;
+                }
+
+                /** 主谱面变化时同步 chartData / ZIP 状态 / 统计 */
+                function refreshCharts() {
+                    if (!charts.length) {
+                        chartData = null;
+                        resetZipState();
+                        fileChip.classList.remove('show');
+                        fileChipText.textContent = '未选择文件';
+                        emptyBox.style.display = '';
+                        workspace.classList.remove('active');
+                        batchPanel.style.display = 'none';
+                        renderChartList();
+                        return;
+                    }
+                    let mi = charts.findIndex(c => c.isMain);
+                    if (mi < 0) { mi = 0; charts[0].isMain = true; }
+                    const main = charts[mi];
+                    chartData = main.data;
+                    // 文件名用 srcName：name 可能带「 · 」和空格，不适合做文件名
+                    fileName = main.srcName || main.name;
+                    currentExt = main.ext || outputExt(main.srcName || main.name);
+                    currentSong = main.songName || main.srcName || main.name;
+                    currentDiff = main.label || '';
+                    resetZipState();
+                    if (main.zip) { zipImportData = main.zip.buf; zipJsonPath = main.zip.jsonPath; isZipImport = true; }
+                    fileChip.classList.add('show');
+                    fileChipText.textContent = charts.length > 1 ? ('已载入 ' + charts.length + ' 张谱面') : main.name;
+                    emptyBox.style.display = 'none';
+                    workspace.classList.add('active');
+                    batchPanel.style.display = '';
+                    renderChartList();
+                    updateModeControls();
+                    renderBlockAreaTip();
+                    computeStats();
+                }
+
+                function setMain(i) {
+                    charts.forEach((c, k) => { c.isMain = (k === i); });
+                    refreshCharts();
+                    showToast('✅', '主谱面已切换', charts[i].name + ' 作为基准');
+                }
+
+                function renderChartList() {
+                    if (!chartList) return;
+                    chartList.innerHTML = '';
+                    charts.forEach((c, i) => {
+                        const row = document.createElement('div');
+                        row.className = 'chart-item' + (c.isMain ? ' is-main' : '');
+
+                        const chk = document.createElement('input');
+                        chk.type = 'checkbox';
+                        chk.className = 'ci-chk';
+                        chk.checked = !!c.include;
+                        chk.title = '参与整合';
+                        chk.addEventListener('change', () => { c.include = chk.checked; renderMergeTip(); });
+
+                        const lab = document.createElement('input');
+                        lab.type = 'text';
+                        lab.className = 'ci-label';
+                        lab.value = c.label;
+                        lab.title = '难度标签，可自行修改';
+                        lab.addEventListener('input', () => { c.label = lab.value; renderMergeTip(); });
+
+                        const nm = document.createElement('div');
+                        nm.className = 'ci-name';
+                        nm.textContent = c.name;
+                        nm.title = c.name;
+
+                        const meta = document.createElement('div');
+                        meta.className = 'ci-meta';
+                        const baCount = countBlockAreas(c.data);
+                        meta.textContent = countNotes(c.data) + ' 音符 · ' + c.data.judgeLineList.length + ' 线'
+                            + (baCount > 0 ? (' · ' + baCount + ' 噪域') : '');
+
+                        const mb = document.createElement('button');
+                        mb.type = 'button';
+                        mb.className = 'ci-main-btn';
+                        mb.textContent = c.isMain ? '主谱面' : '设为主谱面';
+                        mb.addEventListener('click', () => setMain(i));
+
+                        const del = document.createElement('button');
+                        del.type = 'button';
+                        del.className = 'ci-del';
+                        del.textContent = '×';
+                        del.title = '移除这张';
+                        del.addEventListener('click', () => {
+                            charts.splice(i, 1);
+                            if (charts.length && !charts.some(x => x.isMain)) charts[0].isMain = true;
+                            refreshCharts();
+                        });
+
+                        row.appendChild(chk);
+                        row.appendChild(lab);
+                        row.appendChild(nm);
+                        row.appendChild(meta);
+                        row.appendChild(mb);
+                        row.appendChild(del);
+                        chartList.appendChild(row);
+                    });
+                    if (batchCount) {
+                        const m = charts.find(c => c.isMain);
+                        batchCount.textContent = charts.length + ' 张 · 基准：' + (m ? m.label : '-');
+                    }
+                }
+
+                function handleJsonFile(file) {
+                    return new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onerror = () => { showToast('❌', '读取失败', '无法读取 ' + file.name); resolve(false); };
+                        reader.onload = ev => {
+                            try {
+                                const item = addChart(file.name, JSON.parse(ev.target.result), null);
+                                if (item) { item.ext = '.json'; item.songName = baseNoExt(file.name); }
+                                resolve(!!item);
+                            }
+                            catch (err) { showToast('❌', '解析失败', file.name + ' JSON 无效: ' + err.message); resolve(false); }
+                        };
+                        reader.readAsText(file);
+                    });
+                }
+
+                /** 取路径的一级目录名，用于推断歌曲名（曲名/曲名_IN.pez → 曲名） */
+                function topDirName(p) {
+                    const parts = String(p || '').split('/').filter(Boolean);
+                    return parts.length > 1 ? parts[0] : '';
+                }
+
+                /** 取文件名并去掉扩展名 */
+                function baseNoExt(p) {
+                    const parts = String(p || '').split('/').filter(Boolean);
+                    return (parts[parts.length - 1] || '').replace(/\.[^.]+$/, '');
+                }
+
+                /** 从 info.txt 读曲名与难度，形如「Name: xxx」「Level: IN Lv.16」 */
+                function readInfoTxt(text) {
+                    const out = { name: null, diff: null };
+                    const nm = String(text || '').match(/^[ \t]*Name:[ \t]*(.+)$/m);
+                    if (nm) out.name = nm[1].trim();
+                    const lv = String(text || '').match(/^[ \t]*Level:[ \t]*([A-Za-z]+)/m);
+                    if (lv) out.diff = lv[1].toUpperCase();
+                    return out;
+                }
+
+                /**
+                 * 尝试把一个压缩包当作「单个谱面包」解析（内含谱面 JSON + info.txt + 曲绘 + 音频）。
+                 * 成功返回谱面信息，失败返回 null（说明它是容器，需要继续往下挖）。
+                 */
+                async function parseAsChartZip(zip) {
+                    const entries = [];
+                    zip.forEach((rel, e) => { if (!e.dir) entries.push([rel, e]); });
+                    if (!entries.length) return null;
+
+                    const infoEntry = entries.find(([rel]) =>
+                        rel.split('/').pop().toLowerCase() === 'info.txt');
+                    let info = { name: null, diff: null };
+                    if (infoEntry) {
+                        try { info = readInfoTxt(await infoEntry[1].async('text')); }
+                        catch (err) { /* info.txt 读不了不影响谱面本身 */ }
+                    }
+
+                    // 谱面 JSON 名字是随机数字（如 4351585272647465.json），
+                    // 所以只能靠内容判断哪个是谱面，不能靠文件名
+                    for (const [rel, e] of entries) {
+                        if (!rel.toLowerCase().endsWith('.json')) continue;
+                        try {
+                            const data = JSON.parse(await e.async('text'));
+                            if (data && Array.isArray(data.judgeLineList) && data.judgeLineList.length) {
+                                return { data: data, jsonPath: rel, infoName: info.name, infoDiff: info.diff };
+                            }
+                        } catch (err) { /* 不是谱面 JSON，继续找 */ }
+                    }
+                    return null;
+                }
+
+                /**
+                 * 递归扫描压缩包，收集其中的全部谱面。
+                 *
+                 * 支持「压缩包套压缩包」：外层按歌曲分目录，内层每难度一个 .pez / .zip。
+                 * 判定方式很直接 —— 能解析出谱面就当谱面包收下，否则当容器继续往下挖。
+                 */
+                async function scanZip(buffer, songHint, depth, out, extHint) {
+                    if (depth > 4) { console.warn('[scanZip] 嵌套过深，已停止'); return 0; }
+                    let zip;
+                    try { zip = await JSZip.loadAsync(buffer); }
+                    catch (err) { return 0; }
+
+                    const entries = [];
+                    zip.forEach((rel, e) => { if (!e.dir) entries.push([rel, e]); });
+                    if (!entries.length) return 0;
+                    if (entries.length > 500) {
+                        console.warn('[scanZip] 条目过多，只处理前 500 个');
+                        entries.length = 500;
+                    }
+
+                    const subZips = entries.filter(([rel]) => {
+                        const l = rel.toLowerCase();
+                        return l.endsWith('.zip') || l.endsWith('.pez');
+                    });
+
+                    // 关键判定：这一层到底是「一个谱面包」还是「装着很多谱面的容器」？
+                    // 只看「能不能解析出谱面」是不够的 —— 平铺格式（charts/EZ.json、
+                    // charts/HD.json...）也有谱面 JSON，会误判成单个谱面包，只收下第一张。
+                    // 所以先看有没有子压缩包、谱面 JSON 是否多于一个。
+                    let chartJsonCount = 0;
+                    for (const [rel, e] of entries) {
+                        if (!rel.toLowerCase().endsWith('.json')) continue;
+                        try {
+                            const d = JSON.parse(await e.async('text'));
+                            if (d && Array.isArray(d.judgeLineList) && d.judgeLineList.length) chartJsonCount++;
+                        } catch (err) { /* 不是谱面 JSON */ }
+                    }
+
+                    const isContainer = subZips.length > 0 || chartJsonCount > 1;
+                    if (!isContainer) {
+                        const asChart = await parseAsChartZip(zip);
+                        if (asChart) {
+                            out.push({
+                                data: asChart.data,
+                                buf: buffer,
+                                jsonPath: asChart.jsonPath,
+                                song: asChart.infoName || songHint || '',
+                                songName: asChart.infoName || songHint || '',
+                                diff: asChart.infoDiff || guessLabel(songHint || '', 0),
+                                path: songHint || '',
+                                ext: extHint || '.pez',
+                            });
+                            return 1;
+                        }
+                        return 0;
+                    }
+
+                    let n = 0;
+                    for (const [rel, e] of entries) {
+                        const lower = rel.toLowerCase();
+                        if (lower.endsWith('.zip') || lower.endsWith('.pez')) {
+                            // 歌曲名优先取所在目录名，其次是内层文件名
+                            const song = topDirName(rel) || baseNoExt(rel) || songHint || '';
+                            const sub = await e.async('arraybuffer');
+                            n += await scanZip(sub, song, depth + 1, out,
+                                lower.endsWith('.pez') ? '.pez' : '.zip');
+                        } else if (lower.endsWith('.json')) {
+                            try {
+                                const data = JSON.parse(await e.async('text'));
+                                if (data && Array.isArray(data.judgeLineList)) {
+                                    out.push({
+                                        data: data,
+                                        buf: null,
+                                        jsonPath: null,
+                                        song: topDirName(rel) || songHint || '',
+                                        songName: topDirName(rel) || songHint || '',
+                                        diff: guessLabel(rel, 0),
+                                        path: rel,
+                                        ext: '.json',
+                                    });
+                                    n++;
+                                }
+                            } catch (err) { /* 非谱面 JSON，跳过 */ }
+                        }
+                    }
+                    return n;
+                }
+
+                async function handleZipFile(file) {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const found = [];
+                        const n = await scanZip(arrayBuffer, baseNoExt(file.name), 0, found, outputExt(file.name));
+                        if (n === 0) { showToast('❌','ZIP 内无谱面','未找到有效的谱面文件'); return false; }
+
+                        let ok = 0;
+                        for (const f of found) {
+                            // 名称带上歌曲名，多首歌时才能分清谁是谁
+                            const label = f.song ? (f.song + ' ' + (f.diff || '')) : (f.diff || baseNoExt(f.path));
+                            const item = addChart(
+                                (f.song ? f.song + ' · ' : '') + (f.diff || baseNoExt(f.path)),
+                                f.data,
+                                f.buf && f.jsonPath ? { buf: f.buf, jsonPath: f.jsonPath } : null
+                            );
+                            if (item) {
+                                item.srcName = f.song ? (f.song + '_' + (f.diff || '')) : (f.diff || 'chart');
+                                item.ext = f.ext || '.json';
+                                item.songName = f.songName || f.song || '';
+                                if (f.diff) item.label = f.diff;
+                                item.group = f.song || '';
+                                ok++;
+                            }
+                        }
+                        if (ok > 1) {
+                            const groups = new Set(found.map(f => f.song).filter(Boolean));
+                            showToast('✅', '已展开 ' + ok + ' 张',
+                                groups.size > 1 ? (groups.size + ' 首歌 · ' + ok + ' 个难度') : (ok + ' 个难度'));
+                        }
+                        return ok > 0;
+                    } catch(err) { showToast('❌','ZIP 处理失败',err.message); console.error(err); return false; }
+                }
+
+                function loadChart(data) {
+                    if(!data || typeof data !== 'object') { showToast('❌','格式错误','JSON内容为空'); return; }
+                    if(!Array.isArray(data.judgeLineList)) { showToast('❌','格式错误','缺少 judgeLineList'); return; }
+                    if(data.judgeLineList.length === 0) { showToast('⚠️','空谱面','没有判定线'); return; }
+                    chartData = data;
+                    emptyBox.style.display = 'none';
+                    workspace.classList.add('active');
+                    resetAllOptions();
+                    computeStats();
+                    showToast('✅','加载成功',`${fileName} 已就绪`);
+                }
+
+                function getAllNotes(data) {
+                    const out = [];
+                    data.judgeLineList.forEach((line,li) => {
+                        (line.notesAbove||[]).forEach((n,i)=>out.push({...n,_li:li,_layer:'above',_idx:i}));
+                        (line.notesBelow||[]).forEach((n,i)=>out.push({...n,_li:li,_layer:'below',_idx:i}));
+                    });
+                    return out;
+                }
+
+                function getBpmFromChart(data) {
+                    if(!data||!Array.isArray(data.judgeLineList)) return 120;
+                    for(const line of data.judgeLineList) {
+                        const bpm = Number(line.bpm);
+                        if(!isNaN(bpm) && bpm > 0) return bpm;
+                    }
+                    return 120;
+                }
+
+                /* ============================================================
+                   整合：把多张谱面（同一首歌的不同难度）按时段混排成一张
+                   ============================================================ */
+
+                /**
+                 * 判定线指纹：只看运动/旋转/消失/速度事件，不含音符。
+                 * 同一首歌的不同难度常共用判定线，指纹相同即可合并成一条。
+                 */
+                function lineSignature(line) {
+                    return JSON.stringify([
+                        Number(line.bpm) || 0,
+                        line.judgeLineMoveEvents || [],
+                        line.judgeLineRotateEvents || [],
+                        line.judgeLineDisappearEvents || [],
+                        line.speedEvents || []
+                    ]);
+                }
+
+                /** 构建合并后的判定线，并返回 谱面序号 -> [原线序 -> 新线序] 的映射 */
+                function buildMergedLines(list, dedupe) {
+                    const lines = [];
+                    const sigMap = new Map();
+                    const maps = [];
+                    list.forEach(chart => {
+                        const arr = [];
+                        chart.data.judgeLineList.forEach(line => {
+                            const sig = dedupe ? lineSignature(line) : null;
+                            let idx;
+                            if (sig !== null && sigMap.has(sig)) {
+                                idx = sigMap.get(sig);
+                            } else {
+                                const copy = JSON.parse(JSON.stringify(line));
+                                copy.notesAbove = [];
+                                copy.notesBelow = [];
+                                copy.numOfNotes = 0;
+                                lines.push(copy);
+                                idx = lines.length - 1;
+                                if (sig !== null) sigMap.set(sig, idx);
+                            }
+                            arr.push(idx);
+                        });
+                        maps.push(arr);
+                    });
+                    return { lines: lines, maps: maps };
+                }
+
+                /** 统计信息里展示合并后大概会有多少条判定线 */
+                function estimateMergedLines(list, dedupe) {
+                    return buildMergedLines(list, dedupe).lines.length;
+                }
+
+                /**
+                 * 整合主函数（纯函数，不改动入参）
+                 * @param list 参与整合的谱面数组（每项含 data / label）
+                 * @param opts { mode:'even'|'random', segments:number, dedupe:boolean }
+                 * @returns 合并后的谱面数据（其余字段沿用主谱面）
+                 */
+                function mergeCharts(list, opts) {
+                    const blockMode = (opts && opts.blockAreaMode) || 'main';
+                    if (!Array.isArray(list) || list.length < 2) return null;
+
+                    const mode = opts && opts.mode === 'random' ? 'random' : 'even';
+                    const dedupe = !!(opts && opts.dedupe);
+                    let seg = parseInt(opts && opts.segments, 10);
+                    if (isNaN(seg) || seg < 2) seg = 16;
+                    if (seg > 512) seg = 512;
+                    // 平均模式下段数至少要够每张谱面轮到一次
+                    if (mode === 'even' && seg < list.length) seg = list.length;
+
+                    let mainIdx = list.findIndex(c => c.isMain);
+                    if (mainIdx < 0) mainIdx = 0;
+                    const main = list[mainIdx];
+
+                    // 1) 时间轴以主谱面为准
+                    const mainNotes = getAllNotes(main.data);
+                    let minB = Infinity, maxB = -Infinity;
+                    mainNotes.forEach(n => {
+                        const t = Number(n.time);
+                        if (!isNaN(t)) { if (t < minB) minB = t; if (t > maxB) maxB = t; }
+                    });
+                    if (!isFinite(minB) || !isFinite(maxB) || maxB <= minB) { minB = 0; maxB = 1; }
+                    const range = (maxB - minB) || 1;
+
+                    // 2) 每段归属哪张谱面
+                    const owner = [];
+                    for (let i = 0; i < seg; i++) {
+                        owner.push(mode === 'even'
+                            ? list[i % list.length]
+                            : list[Math.floor(Math.random() * list.length)]);
+                    }
+
+                    // 3) 合并判定线
+                    const merged = buildMergedLines(list, dedupe);
+                    const lines = merged.lines;
+                    const maps = merged.maps;
+
+                    // 4) 按段挑音符，落到各自谱面映射后的判定线上
+                    const usedBy = new Map();
+                    list.forEach((chart, ci) => {
+                        const map = maps[ci];
+                        chart.data.judgeLineList.forEach((line, li) => {
+                            const target = lines[map[li]];
+                            if (!target) return;
+                            ['notesAbove', 'notesBelow'].forEach(layer => {
+                                const arr = line[layer];
+                                if (!Array.isArray(arr)) return;
+                                arr.forEach(note => {
+                                    const t = Number(note.time);
+                                    if (isNaN(t)) return;
+                                    if (t < minB - 1e-6 || t > maxB + 1e-6) return;
+                                    let si = Math.floor(((t - minB) / range) * seg);
+                                    if (si < 0) si = 0;
+                                    if (si >= seg) si = seg - 1;
+                                    if (owner[si] !== chart) return;
+                                    target[layer].push(JSON.parse(JSON.stringify(note)));
+                                    usedBy.set(chart.id, (usedBy.get(chart.id) || 0) + 1);
+                                });
+                            });
+                        });
+                    });
+
+                    // 5) 音符按时间排序，重算每条线的音符数
+                    let total = 0;
+                    lines.forEach(l => {
+                        ['notesAbove', 'notesBelow'].forEach(layer => {
+                            l[layer].sort((a, b) => (Number(a.time) || 0) - (Number(b.time) || 0));
+                            total += l[layer].length;
+                        });
+                        l.numOfNotes = l.notesAbove.length + l.notesBelow.length;
+                    });
+
+                    // 6) 输出沿用主谱面的元信息
+                    const out = JSON.parse(JSON.stringify(main.data));
+                    out.judgeLineList = lines;
+                    // 噪域按选定方式处理；'keep' 时维持主谱面原本的（什么都不做）
+                    if (blockMode !== 'keep') {
+                        const areas = mergeBlockAreas(list, blockMode);
+                        if (areas.length > 0) out.blockAreaList = areas;
+                        else delete out.blockAreaList;
+                    }
+                    // 老版本主谱面 + 合并进来的噪域 → 升到 v3，否则 Phira 认不出
+                    ensureFormatVersion(out);
+
+                    const perChart = {};
+                    list.forEach(c => { perChart[c.label] = usedBy.get(c.id) || 0; });
+
+                    return {
+                        data: out,
+                        info: {
+                            mode: mode,
+                            segments: seg,
+                            dedupe: dedupe,
+                            mainLabel: main.label,
+                            labels: list.map(c => c.label),
+                            lineCount: lines.length,
+                            totalNotes: total,
+                            perChart: perChart,
+                            beatRange: [minB, maxB]
+                        }
+                    };
+                }
+
+                /** 整合面板底部的实时说明 */
+                function renderMergeTip() {
+                    if (!mergeTip) return;
+                    const sel = charts.filter(c => c.include);
+                    if (sel.length < 2) {
+                        mergeTip.textContent = '请勾选至少 2 张谱面才能整合（当前已勾选 ' + sel.length + ' 张）。';
+                        return;
+                    }
+                    const seg = Math.max(2, parseInt(segCount.value, 10) || 16);
+                    const modeTxt = mergeModeSel.value === 'even' ? '平均轮流' : '纯随机';
+                    const lc = estimateMergedLines(sel, dedupeLines.checked);
+                    const m = charts.find(c => c.isMain) || sel[0];
+                    mergeTip.textContent = '把 ' + sel.map(c => c.label).join(' → ') +
+                        ' 按时间切成 ' + seg + ' 段，每段 ' + modeTxt + '取一个难度；' +
+                        '合并后判定线约 ' + lc + ' 条，BPM / 背景等沿用主谱面「' + m.label + '」。';
+                }
+
+                function computeStats() {
+                    const notes = getAllNotes(chartData);
+                    const c = {1:0,2:0,3:0,4:0};
+                    let minBeat=Infinity, maxBeat=-Infinity;
+                    notes.forEach(n => {
+                        const t=Number(n.type)||0; if(c[t]!==undefined) c[t]++;
+                        const beat=Number(n.time); if(!isNaN(beat)) { if(beat<minBeat) minBeat=beat; if(beat>maxBeat) maxBeat=beat; }
+                    });
+                    const total = notes.length;
+                    statsCache = {...c, total, minBeat, maxBeat};
+                    animateInt($('#sTap'),c[1]); animateInt($('#sDrag'),c[2]); animateInt($('#sFlick'),c[4]); animateInt($('#sHold'),c[3]); animateInt($('#sTotal'),total);
+                    $('#pTap').textContent = pct(c[1],total); $('#pDrag').textContent = pct(c[2],total);
+                    $('#pFlick').textContent = pct(c[4],total); $('#pHold').textContent = pct(c[3],total);
+                    $('#dTap').style.width = pctRaw(c[1],total)+'%'; $('#dDrag').style.width = pctRaw(c[2],total)+'%';
+                    $('#dFlick').style.width = pctRaw(c[4],total)+'%'; $('#dHold').style.width = pctRaw(c[3],total)+'%';
+                    requestAnimationFrame(()=>drawTimeline(notes));
+                    updateBlockStat();
+                }
+
+                function pct(v,t){ return t?((v/t)*100).toFixed(1)+'%':'0%'; }
+                function pctRaw(v,t){ return t?(v/t)*100:0; }
+                function animateInt(el,target) {
+                    const start=performance.now(), from=parseInt(el.textContent.replace(/\D/g,''))||0, dur=700;
+                    (function tick(now){ const p=Math.min((now-start)/dur,1), ease=1-Math.pow(1-p,3); el.textContent=Math.round(from+(target-from)*ease); if(p<1) requestAnimationFrame(tick); })(start);
+                }
+
+                function drawTimeline(notes, canvasId = 'timeCanvas') {
+                    const canvas = $('#' + canvasId);
+                    const wrap = canvas.parentElement;
+                    const dpr = window.devicePixelRatio || 1;
+                    const W = canvasId === 'largeTimeCanvas' ? wrap.clientWidth * 0.95 : wrap.clientWidth;
+                    const H = canvasId === 'largeTimeCanvas' ? wrap.clientHeight * 0.8 : wrap.clientHeight;
+                    if (!W || !H) return;
+                    canvas.width = W * dpr;
+                    canvas.height = H * dpr;
+                    const ctx = canvas.getContext('2d');
+                    ctx.scale(dpr, dpr);
+                    ctx.clearRect(0, 0, W, H);
+                    if (!notes.length) return;
+                    const beats = notes.map(n => Number(n.time) || 0);
+                    const minB = Math.min(...beats);
+                    const maxB = Math.max(...beats);
+                    const range = maxB - minB || 1;
+                    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+                    ctx.lineWidth = 1;
+                    for (let i = 1; i < 4; i++) {
+                        const y = (H / 4) * i;
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(W, y);
+                        ctx.stroke();
+                    }
+                    notes.forEach(n => {
+                        const x = ((Number(n.time) - minB) / range) * (W - 4) + 2;
+                        const px = Number(n.positionX) || 0;
+                        const y = H / 2 + px * (H * 0.35 / 6);
+                        const color = { 1: '#60c8ff', 2: '#ffe066', 3: '#5eead4', 4: '#ff6b6b' }[n.type] || '#fff';
+                        ctx.fillStyle = color;
+                        ctx.globalAlpha = 0.55;
+                        const size = n.type === 3 ? 3 : 2.2;
+                        ctx.fillRect(x - size / 2, Math.max(2, Math.min(H - 4, y - size / 2)), size, size);
+                    });
+                    ctx.globalAlpha = 1;
+                }
+
+                function createRuleRow(fromVal = 1, toVal = 2) {
+                    const row = document.createElement('div');
+                    row.className = 'rule-row';
+                    const fromSelect = document.createElement('select');
+                    const toSelect = document.createElement('select');
+                    typeOptions.forEach(opt => {
+                        fromSelect.add(new Option(opt.label, opt.value));
+                        toSelect.add(new Option(opt.label, opt.value));
+                    });
+                    fromSelect.value = fromVal;
+                    toSelect.value = toVal;
+                    const updateDisabled = () => {
+                        const fVal = parseInt(fromSelect.value);
+                        const tVal = parseInt(toSelect.value);
+                        Array.from(toSelect.options).forEach(opt => opt.disabled = (parseInt(opt.value) === fVal));
+                        Array.from(fromSelect.options).forEach(opt => opt.disabled = (parseInt(opt.value) === tVal));
+                        if (fVal === tVal) toSelect.value = Array.from(toSelect.options).find(o => !o.disabled)?.value || fVal;
+                    };
+                    fromSelect.addEventListener('change', updateDisabled);
+                    toSelect.addEventListener('change', updateDisabled);
+                    updateDisabled();
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'del-btn';
+                    delBtn.textContent = '×';
+                    delBtn.addEventListener('click', () => row.remove());
+                    const arrow = document.createElement('span');
+                    arrow.className = 'arrow';
+                    arrow.textContent = '→';
+                    row.appendChild(fromSelect);
+                    row.appendChild(arrow);
+                    row.appendChild(toSelect);
+                    row.appendChild(delBtn);
+                    // 这两个 select 也要换成自绘下拉，否则和同页其它控件风格不一致
+                    initComboboxes(row);
+
+                    // 新行根据当前模式设置禁用状态
+                    const randomActive = randomBtn.classList.contains('active');
+                    const globalVal = globalSel.value;
+                    const disableRules = randomActive || (globalVal !== '0');
+                    fromSelect.disabled = disableRules;
+                    toSelect.disabled = disableRules;
+
+                    return row;
+                }
+
+                addRuleBtn.addEventListener('click', () => {
+                    dynamicRules.appendChild(createRuleRow());
+                });
+
+                function getRulesFromUI() {
+                    const global = parseInt(globalSel.value) || 0;
+                    const map = {};
+                    if (global === 0) {
+                        dynamicRules.querySelectorAll('.rule-row').forEach(row => {
+                            const selects = row.querySelectorAll('select');
+                            if (selects.length >= 2) {
+                                const from = parseInt(selects[0].value);
+                                const to = parseInt(selects[1].value);
+                                if (!isNaN(from) && !isNaN(to)) map[from] = to;
+                            }
+                        });
+                    }
+                    return { global, map };
+                }
+
+                // 随机按钮点击（与整合互斥）
+                randomBtn.addEventListener('click', () => {
+                    mergeBtn.classList.remove('active');
+                    randomBtn.classList.toggle('active');
+                    updateModeControls();
+                });
+
+                // 整合按钮点击（与随机互斥）
+                mergeBtn.addEventListener('click', () => {
+                    if (charts.length < 2) {
+                        showToast('⚠️', '需要多张谱面', '请先上传至少 2 张谱面（同一首歌的不同难度）');
+                        return;
+                    }
+                    randomBtn.classList.remove('active');
+                    const on = !mergeBtn.classList.contains('active');
+                    mergeBtn.classList.toggle('active');
+                    updateModeControls();
+                    if (on) renderMergeTip();
+                });
+
+                mergeModeSel.addEventListener('change', renderMergeTip);
+                segCount.addEventListener('input', renderMergeTip);
+                dedupeLines.addEventListener('change', renderMergeTip);
+
+                $('#addMoreBtn').addEventListener('click', () => fileInput.click());
+                $('#clearAllBtn').addEventListener('click', () => {
+                    charts = [];
+                    nextChartId = 1;
+                    resetAllOptions();
+                    refreshCharts();
+                    showToast('🗑️', '已清空', '可以重新上传谱面');
+                });
+
+                // 全局统一下拉变化
+                globalSel.addEventListener('change', updateModeControls);
+
+                function getFeatures() {
+                    return {
+                        random: randomBtn.classList.contains('active'),
+                        merge: mergeBtn.classList.contains('active')
+                    };
+                }
+
+                function processChartData(data, rules, shield, feats) {
+                    const newData = JSON.parse(JSON.stringify(data));
+                    const lines = newData.judgeLineList;
+
+                    if (feats.random) {
+                        const types = [1, 2, 3, 4];
+                        for (let li = 0; li < lines.length; li++) {
+                            const line = lines[li];
+                            ['notesAbove', 'notesBelow'].forEach(layer => {
+                                if (!line[layer]) return;
+                                line[layer] = line[layer].map(note => {
+                                    const noteCopy = { ...note };
+                                    const type = Number(noteCopy.type) || 0;
+                                    if (!(shield && type === 3)) {
+                                        noteCopy.type = types[Math.floor(Math.random() * types.length)];
+                                    }
+                                    return noteCopy;
+                                });
+                            });
+                        }
+                        return newData;
+                    }
+
+                    const { global, map } = rules;
+                    for (let li = 0; li < lines.length; li++) {
+                        const line = lines[li];
+                        ['notesAbove', 'notesBelow'].forEach(layer => {
+                            if (!line[layer]) return;
+                            const kept = [];
+                            for (let i = 0; i < line[layer].length; i++) {
+                                const note = { ...line[layer][i] };
+                                const type = Number(note.type) || 0;
+                                if (shield && type === 3) { kept.push(note); continue; }
+                                if (global > 0) note.type = global;
+                                else if (map[type] !== undefined) note.type = map[type];
+                                kept.push(note);
+                            }
+                            line[layer] = kept;
+                        });
+                    }
+                    return newData;
+                }
+
+                /**
+                 * 生成输出文件名：**歌曲名 + 标识**，不再堆叠一堆参数后缀。
+                 *
+                 * 全部转成某类记「ALL TAP / ALL DRAG / ALL HOLD / ALL FLICK」，
+                 * 随机记 RANDOM，整合记 MIXTURE，自定义映射记 AX。
+                 * 没做转换时保留谱面原本的难度（如 IN）。
+                 */
+                function outputTag(rules, feats, mergedInfo, fallback) {
+                    if (mergedInfo) return MIX_TAG;
+                    if (feats && feats.random) return 'RANDOM';
+                    const g = (rules && rules.global) || 0;
+                    if (g > 0) return ALL_TYPE_TAG[g] || ('all' + g);
+                    if (rules && rules.map && Object.keys(rules.map).length > 0) return 'AX';
+                    return fallback || '';
+                }
+
+                function generateDownloadName(songName, feats, rules, mergedInfo, fallback) {
+                    const base = String(songName || '').replace(/\.(json|zip|pez)$/i, '').trim();
+                    const tag = outputTag(rules, feats, mergedInfo, fallback);
+                    return base + (tag ? '_' + tag : '');
+                }
+
+                /**
+                 * 组装单张谱面的输出。
+                 * 导入的是 zip / pez 就保持容器（替换谱面 JSON 与 info.txt），
+                 * 导入的是裸 json 就输出 json。扩展名跟随原格式。
+                 */
+                async function buildOneOutput(data, chart, rules, feats, mergedInfo) {
+                    const jsonStr = JSON.stringify(data);
+                    if (chart && chart.zip && chart.zip.buf && chart.zip.jsonPath) {
+                        const zip = await JSZip.loadAsync(chart.zip.buf);
+                        await syncInfoFiles(zip, rules, feats, mergedInfo);
+                        zip.file(chart.zip.jsonPath, jsonStr);
+                        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+                        return { blob: blob, ext: chart.ext || outputExt(chart.srcName || chart.name) };
+                    }
+                    return {
+                        blob: new Blob([jsonStr], { type: 'application/json' }),
+                        ext: (chart && chart.ext) || '.json'
+                    };
+                }
+
+                /** 按导入时的格式决定输出扩展名：.pez 进就 .pez 出，否则 Phira 认不出来 */
+                function outputExt(name) {
+                    const m = String(name || '').match(/\.(pez|zip|json)$/i);
+                    return m ? m[0].toLowerCase() : '.json';
+                }
+
+                /**
+                 * 全部转换成某类音符时的标识（全大写）。
+                 * 1=Tap, 2=Drag, 3=Hold, 4=Flick —— 对应 ALL TAP / ALL DRAG / ALL HOLD / ALL FLICK。
+                 */
+                const ALL_TYPE_TAG = { 1: 'ALL TAP', 2: 'ALL DRAG', 3: 'ALL HOLD', 4: 'ALL FLICK' };
+
+                /** 整合混排的标识 */
+                const MIX_TAG = 'MIXTURE';
+
+                /**
+                 * 算出处理后写入 info.txt / info.yml 的难度标识。
+                 * 全部转成某类记「ALL XXX」，随机记 RANDOM，
+                 * 整合记 MIXTURE，自定义映射记 AX。
+                 */
+                function computeLevelTag(rules, feats, mergedInfo) {
+                    if (mergedInfo) return MIX_TAG;
+                    if (feats && feats.random) return 'RANDOM';
+                    const g = (rules && rules.global) || 0;
+                    if (g > 0) return ALL_TYPE_TAG[g] || null;
+                    if (rules && rules.map && Object.keys(rules.map).length > 0) return 'AX';
+                    return null;
+                }
+
+                function applyDifficultyToInfo(infoContent, rules, feats, mergedInfo) {
+                    const newDiff = computeLevelTag(rules, feats, mergedInfo);
+                    if (!newDiff) return infoContent;
+                    // 标识可能含空格（ALL TAP），所以按「Lv. 及之后」切分，
+                    // 只替换它前面的部分 —— 否则对已处理过的文件再跑一次会叠成 "ALL ALL TAP"
+                    return infoContent.replace(/^(Level:[ \t]*)(.*)$/m, (m, prefix, body) => {
+                        const lm = String(body).match(/\s+Lv\..*$/);
+                        return prefix + newDiff + (lm ? lm[0] : '');
+                    });
+                }
+
+                /**
+                 * 改写 info.yml 的 level 字段。
+                 * yml 与 txt 作用相同，之前只改了 txt，导致包内两个文件对不上。
+                 * 只替换等级串里 Lv. 之前的部分（如 "AT Lv.17" → "MIXTURE Lv.17"），
+                 * 保留后面的 Lv. 数值；引号样式（有/无）保持原样。
+                 */
+                function applyDifficultyToYml(ymlContent, rules, feats, mergedInfo) {
+                    const newDiff = computeLevelTag(rules, feats, mergedInfo);
+                    if (!newDiff) return ymlContent;
+                    return ymlContent.replace(/^([ \t]*level:[ \t]*)(?:"([^"\n]*)"|'([^'\n]*)'|([^\n]*))$/m,
+                        (m, prefix, dq, sq, bare) => {
+                            const raw = dq !== undefined ? dq : (sq !== undefined ? sq : bare);
+                            // 同样按 Lv. 切分，保证重复处理不会叠加
+                            const lm = String(raw).match(/\s+Lv\..*$/);
+                            const rest = lm ? lm[0].trim() : '';
+                            const val = rest ? (newDiff + ' ' + rest) : newDiff;
+                            if (dq !== undefined) return prefix + '"' + val + '"';
+                            if (sq !== undefined) return prefix + "'" + val + "'";
+                            return prefix + val;
+                        });
+                }
+
+                /** 在压缩包里按名字找条目（大小写不敏感，只看文件名部分） */
+                function findEntry(zip, fileName) {
+                    const target = fileName.toLowerCase();
+                    let hit = zip.file(fileName) || zip.file(fileName.toLowerCase()) || zip.file(fileName.toUpperCase());
+                    if (hit) return hit;
+                    zip.forEach((rel, e) => {
+                        if (!hit && !e.dir && rel.split('/').pop().toLowerCase() === target) hit = e;
+                    });
+                    return hit;
+                }
+
+                /** 把 info.txt / info.yml 的难度标识一起改掉 */
+                async function syncInfoFiles(zip, rules, feats, mergedInfo) {
+                    let touched = 0;
+                    const txt = findEntry(zip, 'info.txt');
+                    if (txt) {
+                        const src = await txt.async('text');
+                        const outTxt = applyDifficultyToInfo(src, rules, feats, mergedInfo);
+                        if (outTxt !== src) { zip.file(txt.name, outTxt); touched++; }
+                    }
+                    const yml = findEntry(zip, 'info.yml');
+                    if (yml) {
+                        const src = await yml.async('text');
+                        const outYml = applyDifficultyToYml(src, rules, feats, mergedInfo);
+                        if (outYml !== src) { zip.file(yml.name, outYml); touched++; }
+                    }
+                    return touched;
+                }
+
+                processBtn.addEventListener('click', async () => {
+                    try {
+                        if (!chartData) { showToast('❌', '未加载', '请先上传谱面'); return; }
+                        const rules = getRulesFromUI();
+                        const feats = getFeatures();
+                        const shield = feats.random ? randomShieldHold.checked : shieldHold.checked;
+                        processBtn.disabled = true;
+                        showOverlay(true);
+                        setProgress(30, '处理中…', '正在应用修改');
+
+                        // 整合模式：先把多张谱面混排成一张，再走常规处理
+                        let srcData = chartData;
+                        let mergedInfo = null;
+                        if (feats.merge) {
+                            const sel = charts.filter(c => c.include);
+                            if (sel.length < 2) {
+                                showToast('❌', '整合失败', '请至少勾选 2 张谱面参与整合');
+                                processBtn.disabled = false;
+                                showOverlay(false);
+                                return;
+                            }
+                            setProgress(45, '整合中…', '混排 ' + sel.map(c => c.label).join(' / '));
+                            const res = mergeCharts(sel, {
+                                mode: mergeModeSel.value,
+                                segments: parseInt(segCount.value, 10),
+                                dedupe: dedupeLines.checked,
+                                blockAreaMode: blockAreaMode ? blockAreaMode.value : 'main'
+                            });
+                            if (!res) {
+                                showToast('❌', '整合失败', '整合结果为空');
+                                processBtn.disabled = false;
+                                showOverlay(false);
+                                return;
+                            }
+                            srcData = res.data;
+                            mergedInfo = res.info;
+                        }
+
+                        const processedData = processChartData(srcData, rules, shield, feats);
+                        // 「删除所有噪域」在非整合路径下单独生效
+                        if (blockAreaMode && blockAreaMode.value === 'none' && !feats.merge) {
+                            delete processedData.blockAreaList;
+                        }
+                        ensureFormatVersion(processedData);
+                        const jsonStr = JSON.stringify(processedData);
+
+                        // 分别处理模式：把每张勾选的谱面各自打包，再汇总成一个压缩包
+                        if (!feats.merge && splitOutput.checked) {
+                            const targets = charts.filter(c => c.include);
+                            if (targets.length < 2) {
+                                showToast('⚠️', '无需分别处理', '只有 1 张谱面，已按单张输出');
+                            } else {
+                                setProgress(70, '生成文件…', '分别处理 ' + targets.length + ' 张谱面');
+                                const out = new JSZip();
+                                const used = new Set();
+                                for (let ti = 0; ti < targets.length; ti++) {
+                                    const c = targets[ti];
+                                    const oneData = processChartData(c.data, rules, shield, feats);
+                                    if (blockAreaMode && blockAreaMode.value === 'none') {
+                                        delete oneData.blockAreaList;
+                                    }
+                                    ensureFormatVersion(oneData);
+                                    const one = await buildOneOutput(oneData, c, rules, feats, null);
+                                    const base = c.songName || c.srcName || c.name;
+                                    let fn = generateDownloadName(base, feats, rules, null, c.label) + one.ext;
+                                    // 同名会互相覆盖，加序号兜底
+                                    if (used.has(fn)) fn = fn.replace(/\.(pez|zip|json)$/i, '') + '_' + (ti + 1) + '$&';
+                                    used.add(fn);
+                                    // 有歌曲名时按歌曲分目录，和下载站导出的结构保持一致
+                                    const parent = c.group ? (out.folder(c.group.replace(/[<>:"/\\|?*]/g, '')) || out) : out;
+                                    parent.file(fn, one.blob);
+                                }
+                                const allBlob = await out.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+                                const url = URL.createObjectURL(allBlob);
+                                const a = document.createElement('a'); a.href = url;
+                                a.download = generateDownloadName(currentSong, feats, rules, null, '') + '_all.zip';
+                                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                                setTimeout(() => URL.revokeObjectURL(url), 200);
+                                setProgress(100, '完成', '已打包 ' + targets.length + ' 张谱面');
+                                showToast('✅', '处理完成', a.download);
+                                return;
+                            }
+                        }
+
+                        setProgress(70, '生成文件…', isZipImport ? '重新打包 ZIP' : '生成 JSON');
+                        if (isZipImport && zipImportData && zipJsonPath) {
+                            const zip = await JSZip.loadAsync(zipImportData);
+                            const touched = await syncInfoFiles(zip, rules, feats, mergedInfo);
+                            if (touched > 0) {
+                                showToast('🔧', '难度已更新', `info.txt / info.yml 难度标识已同步修改`);
+                            }
+                            zip.file(zipJsonPath, jsonStr);
+                            const newZipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+                            const url = URL.createObjectURL(newZipBlob);
+                            const a = document.createElement('a'); a.href = url;
+                            a.download = generateDownloadName(currentSong, feats, rules, mergedInfo, currentDiff) + currentExt;
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 200);
+                            setProgress(100, '完成', 'ZIP 文件已下载');
+                            showToast('✅', '处理完成', a.download);
+                        } else {
+                            const blob = new Blob([jsonStr], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a'); a.href = url;
+                            a.download = generateDownloadName(currentSong, feats, rules, mergedInfo, currentDiff) + '.json';
+                            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 200);
+                            setProgress(100, '完成', 'JSON 文件已下载');
+                            showToast('✅', '处理完成', a.download);
+                        }
+                    } catch (err) { showToast('❌', '处理失败', err.message); console.error(err); }
+                    finally { setTimeout(() => { showOverlay(false); processBtn.disabled = false; }, 800); }
+                });
+
+                if (blockAreaMode) blockAreaMode.addEventListener('change', renderBlockAreaTip);
+
+                resetBtn.addEventListener('click', resetAllOptions);
+                reportBtn.addEventListener('click', () => {
+                    if (!chartData || !statsCache) { showToast('❌', '无数据', '请先加载谱面'); return; }
+                    const s = statsCache;
+                    const lines = [
+                        '╔══════════════════════════════════════════╗',
+                        '║      Phigros Chart Analysis Report       ║',
+                        '╠══════════════════════════════════════════╣',
+                        `  File: ${fileName}`,
+                        `  Format: ${chartData.formatVersion ?? 'Unknown'}`,
+                        `  BPM: ${getBpmFromChart(chartData)}`,
+                        `  JudgeLines: ${chartData.judgeLineList.length}`,
+                        `  BlockAreas: ${countBlockAreas(chartData)}`,
+                        `  Beat Range: ${s.minBeat.toFixed(1)} ~ ${s.maxBeat.toFixed(1)}`,
+                        '╠══════════════════════════════════════════╣',
+                        '  Note Statistics',
+                        `    Tap   : ${s[1]} (${pct(s[1], s.total)})`,
+                        `    Drag  : ${s[2]} (${pct(s[2], s.total)})`,
+                        `    Flick : ${s[4]} (${pct(s[4], s.total)})`,
+                        `    Hold  : ${s[3]} (${pct(s[3], s.total)})`,
+                        `    ────────`,
+                        `    Total : ${s.total}`,
+                        '╚══════════════════════════════════════════╝'
+                    ].join('\n');
+                    const blob = new Blob([lines], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = fileName.replace(/\.(json|zip)$/i, '_report.txt');
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 200);
+                    showToast('📄', '报告已导出', '统计报告已下载');
+                });
+
+                miniCanvasWrap.addEventListener('click', () => {
+                    if (!chartData) return;
+                    canvasOverlay.classList.add('on');
+                    requestAnimationFrame(() => drawTimeline(getAllNotes(chartData), 'largeTimeCanvas'));
+                });
+                closeCanvasBtn.addEventListener('click', () => canvasOverlay.classList.remove('on'));
+                canvasOverlay.addEventListener('click', (e) => {
+                    if (e.target === canvasOverlay) canvasOverlay.classList.remove('on');
+                });
+
+                function showOverlay(on) { overlay.classList.toggle('on', on); }
+                function setProgress(pctVal, status, detail) {
+                    progPct.textContent = pctVal + '%'; progStatus.textContent = status;
+                    progBar.style.width = pctVal + '%'; progDetail.textContent = detail;
+                }
+                let toastTimer;
+                function showToast(icon, title, msg) {
+                    $('#toastIcon').textContent = icon; $('#toastTitle').textContent = title; $('#toastMsg').textContent = msg;
+                    toast.classList.add('on'); clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => toast.classList.remove('on'), 3500);
+                }
+                window.addEventListener('resize', () => {
+                    if (chartData && statsCache) requestAnimationFrame(() => drawTimeline(getAllNotes(chartData)));
+                });
+                // 点页面空白处收起下拉
+                document.addEventListener('click', () => closeCombos(null));
+                // 把原生 select 换成自绘下拉（噪域模式 / 全局统一 / 整合模式）
+                initComboboxes();
+            })();
+        })();
+
+        document.getElementById('back-btn').addEventListener('click', () => {
+            localStorage.removeItem('access_token');
+            // 带上当前地址，答完题后回到本页，而不是一律落到导航中心
+            location.href = '/quiz/?return_to=' + encodeURIComponent(location.href);
+        });
+        document.getElementById('reload-btn').addEventListener('click', () => {
+            location.reload();
+        });
+    </script>
+    <script src="/data/changelog-widget.js" data-scope="pmth" data-variant="dock" data-accent="#a78bfa"></script>
+</body>
+</html>

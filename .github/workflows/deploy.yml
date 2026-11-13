@@ -1,0 +1,44 @@
+name: Deploy GitHub Pages
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies(Vite项目)
+        working-directory: ./Download
+        run: npm install
+
+      # vite build 产出 dist/download/（下载站），
+      # copy-static.mjs 补齐 dist/index.html（导航页）、quiz/ pmth/ philzy/
+      # signal/ jpg/ 与统一数据目录 data/。本地与线上走同一条命令。
+      - name: Build whole site
+        working-directory: ./Download
+        run: npm run build
+
+      - name: Verify dist layout
+        run: |
+          echo "--- dist 顶层 ---"
+          ls -la ./dist
+          echo "--- 必须存在的路径 ---"
+          for p in index.html CNAME data/changelog.json data/faq.json \
+                   data/pcd.data data/dl.data data/lz.data \
+                   quiz/index.html pmth/index.html philzy/index.html \
+                   signal/index.html download/index.html; do
+            if [ -f "./dist/$p" ]; then echo "OK   $p"; else echo "MISS $p"; fi
+          done
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist

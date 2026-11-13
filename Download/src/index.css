@@ -1,0 +1,302 @@
+@import "tailwindcss";
+
+@theme {
+  --font-saira: Saira, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --color-brand-cyan: #22d3ee;
+  --color-brand-purple: #a855f7;
+  /* 对齐上游的面板底色：纯黑太闷、太亮又不沉，这层近黑的深蓝灰最稳 */
+  --color-ink: #090b10;
+  --color-panel: rgba(12, 15, 22, 0.97);
+  --animate-marquee: marquee 15s linear infinite;
+  --animate-shake: shake 0.2s ease-in-out 0s 2;
+  --animate-fade-in: fadeIn 0.5s ease-in-out;
+  
+  @keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* 细滚动条：列表、弹窗内容区都用它，替代默认粗滚动条 */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* 导出按钮的呼吸光晕（对齐上游 export-glow） */
+.export-glow {
+  box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.45);
+  animation: exportGlow 2.4s ease-out infinite;
+}
+@keyframes exportGlow {
+  0% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.32); }
+  70% { box-shadow: 0 0 0 10px rgba(34, 211, 238, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .export-glow { animation: none; }
+}
+
+/* 底部 toast */
+.motion-toast {
+  animation: toastIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* 弹窗顶部的细色调线，颜色由 tone 决定（info 青 / warning 琥珀 / error 红） */
+.dialog-topline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.motion-backdrop {
+  animation: backdropIn 180ms ease-out both;
+}
+
+.motion-dialog {
+  animation: dialogIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: center;
+}
+
+.motion-dropdown {
+  animation: dropdownIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+}
+
+.motion-dropdown-up {
+  animation: dropdownUpIn 180ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom center;
+}
+
+.motion-switch-thumb {
+  box-shadow: 0 2px 8px rgb(15 23 42 / 0.35);
+  transition: translate 220ms cubic-bezier(0.16, 1, 0.3, 1), scale 160ms ease, box-shadow 220ms ease;
+}
+
+.motion-switch:active .motion-switch-thumb:not(.motion-switch-thumb-disabled) {
+  box-shadow: 0 1px 4px rgb(15 23 42 / 0.45);
+  scale: 1.12 1;
+}
+
+.motion-settings-group {
+  transition: opacity 220ms ease, translate 220ms cubic-bezier(0.16, 1, 0.3, 1), border-color 220ms ease;
+}
+
+.motion-subgroup {
+  animation: subgroupIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top center;
+}
+
+.motion-shake {
+  animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* ===== dvh 兼容兜底 =====
+   iOS Safari 15.4 以下、旧版 Android WebView、部分 App 内置浏览器不认识 dvh，
+   整条 height / max-height 声明会被丢弃。配合外层的 overflow-hidden，
+   内容会被裁掉且滚不动 —— 表现就是「只看到一截、滑不下去」。
+   这里用 vh 打底、dvh 覆盖：支持的浏览器取更准的 dvh，不支持的自动用 vh。 */
+.h-app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* 弹窗高度：所有尺寸都要限制，不只是手机。
+   之前只在 max-width:767.98px 里定义了 height，平板（≥768px）拿不到任何高度限制，
+   面板高度由内容撑开 → 内容区的 flex-1 min-h-0 失效（父级没有确定高度）
+   → 超出视口的部分被 overflow-hidden 裁掉且滚不动，底部按钮点不到。
+   桌面用 max-height 留出外层 p-4 的上下边距（各 1rem）。 */
+.h-dialog-panel {
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+}
+
+@media (max-width: 767.98px) {
+  .h-dialog-panel {
+    height: calc(100vh - 10px);
+    height: calc(100dvh - 10px);
+    /* 手机端改为整屏，不能让上面的 max-height 把它压矮 */
+    max-height: none;
+  }
+  .max-h-sheet {
+    max-height: 86vh;
+    max-height: 86dvh;
+  }
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(71 85 105) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(71 85 105);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(100 116 139);
+}
+
+@keyframes subgroupIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes backdropIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+@keyframes dialogIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dropdownUpIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-backdrop,
+  .motion-dialog,
+  .motion-dropdown,
+  .motion-dropdown-up {
+    animation: none;
+  }
+
+  .motion-switch-thumb,
+  .motion-settings-group {
+    transition-duration: 1ms;
+  }
+
+  .motion-subgroup {
+    animation: none;
+  }
+
+  .motion-shake {
+    animation: none;
+  }
+}
+
+/* 手机端：弹窗从屏幕底部升起，而不是从中心缩放淡入。
+   桌面用 dialogIn（居中缩放），这里按上游用媒体查询覆盖。 */
+@keyframes sheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (max-width: 767.98px) {
+  .motion-dialog {
+    animation: sheetIn 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* 手机端 toast 从底部上滑（桌面是从中心偏下的位移） */
+@keyframes toastInMobile {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* 关闭毛玻璃时用纯黑淡入替代 backdrop 的模糊动画 */
+@keyframes backdropFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* 与上游一致：设置里关掉「模糊」后，弹窗遮罩改为纯黑淡入，不再做毛玻璃。
+   由 App 根据 newUiBlur 在 <html> 上写 data-blur="off"。 */
+html[data-blur="off"] [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-image: linear-gradient(rgba(0, 0, 0, .35), rgba(0, 0, 0, .35));
+}
+html[data-blur="off"] .motion-backdrop {
+  animation-name: backdropFadeIn;
+  background-color: rgba(0, 0, 0, .88);
+}
