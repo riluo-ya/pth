@@ -759,7 +759,29 @@ h-dvh flex flex-col               全高应用，不随内容滚动
 弹窗点遮罩空白处、右上角 ×、Esc 都能关，打开时锁住页面滚动。蓝奏云 / 谱面工坊 /
 SIGNAL 统一用浮动按钮 + 居中弹窗（强调色各不相同），导航页保持内嵌区块以填补卡片区下方的空白；
 下载站与答题页不引浮动按钮。引脚本的页面共用 `data/changelog-widget.js`，
-数据依次尝试本站 → jsDelivr → gcore → GitHub Raw，全失败时仍显示「暂无信息」。
+数据依次尝试「脚本同目录」→ 根路径 `/data/` → jsDelivr → gcore → GitHub Raw。
+
+### 更新日志不显示时怎么排查
+
+四个原生页面（导航页 / 蓝奏云 / 工坊 / SIGNAL）的日志完全依赖 `data/changelog-widget.js`
+去读 `data/changelog.json`；下载站另有打包在 JS 里的内置兜底日志，所以**在线 JSON 挂掉时
+往往只有下载站看起来正常**，这是判断问题方向的关键线索。
+
+按顺序检查：
+
+1. 打开 `https://phth.cc.cd/data/changelog.json`，应能看到 `"pages"` 字段（含 `other`）。
+   404 或还是旧的 `scope` / `content` 结构 → 说明 `data/` 没推上去或推的是旧包。
+2. 打开 `https://phth.cc.cd/data/changelog-widget.js`，搜索 `normalizeDay`。
+   搜不到 → 线上还是旧版组件，读不懂新的 `pages` 结构。
+3. 浏览器 DevTools 的 Console 会打印 `[changelog] widget v… | scope=…` 和
+   `[changelog] 命中数据源 N：…`；若全是「源 N 失败」，说明数据地址不通。
+4. 组件现在会在**所有数据源都失败**时显示黄色错误卡片和「重新加载」按钮，
+   不再伪装成「暂无信息」；「暂无信息」只代表该栏目确实没填内容。
+
+四个页面引用组件时带了 `?v=20261113e` 版本号。**以后每次修改 `data/changelog-widget.js`，
+都要同时把这四个 `?v=` 一起改掉**（以及文件内的 `WIDGET_VERSION`），
+否则浏览器 / CDN 会继续用缓存里的旧组件，与新 JSON 结构错配。
+CI 的 `Verify dist layout` 现在会在 `data/changelog-widget.js` 等必要文件缺失时直接失败。
 
 ### 本地与部署
 

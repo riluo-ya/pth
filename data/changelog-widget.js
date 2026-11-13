@@ -27,7 +27,7 @@
  *   dock    右下角浮动按钮 + 居中弹窗（默认）
  *   inline  直接渲染进 #pth-changelog-inline（导航页底部常驻区块）
  *
- * 筛完之后一条都没有、或数据加载失败 → 显示「暂无信息」。
+ * 筛完之后一条都没有 → 「暂无信息」；数据加载失败 → 明确的错误提示与重试按钮。
  * ============================================================ */
 (function () {
     'use strict';
@@ -38,14 +38,24 @@
     var scope = (tag.getAttribute('data-scope') || 'all').toLowerCase();
     var variant = tag.getAttribute('data-variant') || 'dock';
     var accent = tag.getAttribute('data-accent') || '#22d3ee';
-    // 线上走本站 /data/；本地 dev server 或 CDN 缓存异常时依次回退。
+    var WIDGET_VERSION = '2026.11.13-e';
+
+    // 优先用「脚本自己所在目录」推导 JSON 地址：无论站点挂在域名根还是
+    // 子路径（例如还没绑自定义域名时的 /pth/），这个地址永远指向同一份数据。
+    // 之后再补绝对路径与 CDN 兜底。
+    var SELF_DIR = (function () {
+        try { return new URL('.', tag.src).href; } catch (e) { return '/data/'; }
+    })();
     var DATA_SOURCES = [
+        SELF_DIR + 'changelog.json',
         '/data/changelog.json',
         'https://cdn.jsdelivr.net/gh/riluo-ya/pth@main/data/changelog.json',
         'https://gcore.jsdelivr.net/gh/riluo-ya/pth@main/data/changelog.json',
         'https://raw.githubusercontent.com/riluo-ya/pth/main/data/changelog.json'
     ];
     var EMPTY_TEXT = '暂无信息';
+    console.info('[changelog] widget v' + WIDGET_VERSION + ' | scope=' + scope +
+        ' | 首选源 ' + DATA_SOURCES[0]);
 
     function esc(s) {
         return String(s == null ? '' : s)
@@ -176,6 +186,22 @@
         return html;
     }
 
+    /** 所有源都失败时显示明确的错误提示，不再伪装成「暂无信息」 */
+    function errorHtml() {
+        return '<div class="pth-cl-errbox">' +
+            '<div class="pth-cl-errbox-t">在线更新日志加载失败</div>' +
+            '<div class="pth-cl-errbox-d">可能是数据文件还没推送、路径不对，或网络暂时不通。' +
+            '可打开 <code>' + esc(DATA_SOURCES[0]) + '</code> 确认能否访问。</div>' +
+            '<button type="button" class="pth-cl-retry">重新加载</button>' +
+            '</div>';
+    }
+    function wireRetry() {
+        var btns = document.querySelectorAll('.pth-cl-retry');
+        for (var i = 0; i < btns.length; i++) {
+            btns[i].addEventListener('click', function () { loadNext(0); });
+        }
+    }
+
     var css = [
         '.pth-cl-root{--pth-cl-accent:', accent, ';font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}',
         /* 浮动按钮 */
@@ -237,6 +263,14 @@
         '.pth-cl-ul li{margin:2px 0;color:#94a3b8;}',
         '.pth-cl-empty{padding:48px 12px;text-align:center;color:#64748b;font-size:13px;}',
         '.pth-cl-err{padding:10px 0;color:#fbbf24;font-size:11px;}',
+        '.pth-cl-errbox{border:1px solid rgba(251,191,36,.32);background:rgba(251,191,36,.07);',
+        'border-radius:10px;padding:16px 15px;text-align:center;}',
+        '.pth-cl-errbox-t{font-size:14px;font-weight:700;color:#fbbf24;margin-bottom:7px;}',
+        '.pth-cl-errbox-d{font-size:12px;line-height:1.7;color:#94a3b8;margin-bottom:12px;word-break:break-all;}',
+        '.pth-cl-errbox-d code{font-size:11px;color:#cbd5e1;}',
+        '.pth-cl-retry{border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.12);',
+        'color:#fbbf24;padding:7px 16px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;}',
+        '.pth-cl-retry:hover{background:rgba(251,191,36,.2);}',
         /* inline 变体：导航页底部的常驻区块 */
         '.pth-cl-inline{max-width:960px;margin:36px auto 0;padding:24px 22px;border-radius:14px;',
         'background:rgba(15,20,30,.55);border:1px solid rgba(255,255,255,.08);}',
@@ -318,9 +352,9 @@
 
         return function render(data, err) {
             var n = visibleDays(err ? null : data).length;
-            badge.textContent = String(n);
-            scroll.innerHTML = listHtml(err ? null : data) +
-                (err ? '<div class="pth-cl-err">在线数据暂不可用，可稍后刷新重试。</div>' : '');
+            badge.textContent = err ? '!' : String(n);
+            scroll.innerHTML = err ? errorHtml() : listHtml(data);
+            if (err) wireRetry();
         };
     }
 
@@ -334,8 +368,8 @@
             '<div class="pth-cl-inline-list"><div class="pth-cl-empty">加载中…</div></div>';
         var box = host.querySelector('.pth-cl-inline-list');
         return function render(data, err) {
-            box.innerHTML = listHtml(err ? null : data) +
-                (err ? '<div class="pth-cl-err">在线数据暂不可用，可稍后刷新重试。</div>' : '');
+            box.innerHTML = err ? errorHtml() : listHtml(data);
+            if (err) wireRetry();
         };
     }
 
@@ -345,19 +379,32 @@
     function loadNext(i) {
         if (i >= DATA_SOURCES.length) {
             console.warn('[changelog] 全部数据源均不可用');
-            render(null, true);   // 空态统一显示「暂无信息」
+            render(null, true);
             return;
         }
-        fetch(DATA_SOURCES[i] + '?_t=' + Date.now(), { cache: 'no-store' })
+        var base = DATA_SOURCES[i];
+        var url = base + (base.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now();
+        fetch(url, { cache: 'no-store' })
             .then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 return r.json();
             })
             .then(function (data) {
-                if (!data || !Array.isArray(data.logs)) throw new Error('日志格式错误');
+                if (!data || !Array.isArray(data.logs)) throw new Error('logs 不是数组');
+                // 结构校验：至少一条能被本组件认识，否则视为拿到了不兼容的数据，
+                // 继续换下一个源，而不是静默显示「暂无信息」。
+                var recognized = data.logs.some(function (l) {
+                    return l && typeof l === 'object' &&
+                        (l.pages || typeof l.content === 'string' || l.contentByScope);
+                });
+                if (data.logs.length && !recognized) throw new Error('日志结构不认识');
+                console.info('[changelog] 命中数据源 ' + (i + 1) + '：' + base);
                 render(data, false);
             })
-            .catch(function () { loadNext(i + 1); });
+            .catch(function (e) {
+                console.warn('[changelog] 源 ' + (i + 1) + ' 失败：' + base + ' → ' + (e.message || e));
+                loadNext(i + 1);
+            });
     }
     loadNext(0);
 })();
