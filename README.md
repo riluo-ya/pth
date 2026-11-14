@@ -59,7 +59,7 @@ pth/
 ├── quiz/index.html             # 答题页
 ├── pmth/index.html             # 谱面工坊（小写）
 ├── philzy/index.html           # 蓝奏云网盘索引
-├── signal/                     # SIGNAL 演出工具（第三方项目二改）
+├── signal/                     # SIGNAL 演出工具（第三方项目站点接入）
 ├── download/                   # 构建产物：谱面下载站（Vite 输出到 dist/download/）
 ├── jpg/                        # 导航卡片配图
 ├── data/                       # 统一管理的数据
@@ -109,7 +109,7 @@ pth/
 | `/download/` | 谱面下载站（Vite 构建产物） |
 | `/pmth/` | Phigros Chart Studio 谱面工坊：导入谱面，应用规则后导出 |
 | `/philzy/` | 蓝奏云网盘索引 |
-| `/signal/` | SIGNAL 演出工具：编辑选项与数字，预览动画并导出 PNG 帧序列（**第三方项目二改**） |
+| `/signal/` | SIGNAL 演出工具：编辑选项与数字，预览动画并导出 MP4 / PNG 帧序列 / GIF（**第三方项目站点接入**） |
 
 谱面工坊处理用户上传的谱面文件（`.json` / `.zip` / `.pez`），
 应用替换规则与特性后导出。**输出格式跟随输入**：导入 `.pez` 就导出 `.pez`
@@ -476,47 +476,45 @@ sessionStorage，但**保留**登录凭证、已选加速源与 CDN 版本号，
 
 ---
 
-## 第三方项目：SIGNAL（二次开发）
+## 第三方项目：SIGNAL（站点接入）
 
 `signal/` 目录来自 [Lylighte/signal-replica](https://github.com/Lylighte/signal-replica)
-（MIT License），PTH 在其基础上做了二次开发，**原始代码文件保持上游原样未改动**。
+（MIT License）仓库 `dist/` 的全部内容，同步到 `main` 分支 `8d2fd6d`（2026-10-29），
+**JS / CSS / 素材文件保持原样**。PTH 只在 `index.html` 上做站点接入：
 
-二改内容：
+1. 注入答题验证闸门（与其它受保护页面同一套算法，12 小时有效）
+2. 闸门未通过时**不加载** `studio.js` 及其依赖模块，避免未授权状态下预载音频与渲染画布
+3. 顶栏新增「返回导航」按钮、右下角固定显示来源署名
+4. 引入 `../data/changelog-widget.js`，以 `data-scope="signal"` 显示本页更新日志
+5. 页面标题改为 `SIGNAL · Phigros Tool Hub`
 
-1. 在 `index.html` 注入答题验证闸门（与其它受保护页面同一套算法，12 小时有效）
-2. 页面右下角固定显示来源署名与原仓库链接
-3. 答题页回跳白名单新增 `/signal/`
-4. 导航数据新增指向 `./signal/` 的入口
+答题页回跳白名单与导航数据里的 `/signal/` 入口在前几次改版中已就位。
+完整的来源、许可证与集成清单见 **`signal/ATTRIBUTION.md`**，原仓库 README 副本见
+`signal/README-SIGNAL.md`。MIT 协议要求保留版权与许可声明，请勿删除
+`signal/LICENSE-SIGNAL.md` 与页面署名。
 
-完整的来源、许可证与二改清单见 **`signal/ATTRIBUTION.md`**。MIT 协议要求保留版权
-与许可声明，请勿删除 `signal/LICENSE-SIGNAL.md` 与页面署名。
+### 导出能力
 
-上游更新时只需覆盖原始文件（除 `index.html` 外），再补回两处注入即可。
+三种格式都在浏览器本地逐帧渲染，不上传任何数据：
 
-### MP4 导出（本地编码）
-
-除了 PNG 帧序列，还可以直接导出 MP4：H.264 画面 + AAC 音轨，全部用浏览器内置编码器在本地完成，不上传任何数据。
-
-| 文件 | 作用 |
+| 格式 | 说明 |
 |---|---|
-| `signal/mp4-muxer.js` | 把裸流封装成标准 MP4（ISO BMFF） |
-| `signal/video-export.js` | WebCodecs 编码 + 音频裁剪 |
+| MP4 | H.264 视频，可选 AAC 音轨；1080p / 2K / 4K，30–165 FPS |
+| PNG ZIP | 帧序列 + `manifest.json`，1–165 FPS，单次最多 5000 帧 |
+| GIF | 彩色动画，四档压缩，最高 720p |
 
-要点：
+MP4 封装使用 `vendor/mediabunny.js`（Mediabunny 1.62.0 + AAC 编码器，MPL-2.0），
+导出前会检查 WebCodecs H.264、Web Worker、WebAssembly 与 Web Audio 能力，
+不满足时明确报错而不是静默降规格。2K / 4K 直接按目标分辨率创建 Canvas，
+不由 1080p 放大生成。
 
-- 每秒一个关键帧便于拖动
-- **以画面为主时间轴**，音频超出画面长度的部分会被裁掉，保证音画同步
-- **时间基准用标准值**：视频轨 `fps×1000`、movie 基准 `1000`（毫秒）。
-  早期版本让视频轨基准 = fps（30fps 时即 `1/30`），数学上等价且 ffmpeg 认，
-  但大量播放器/硬解会误读这么低的基准，表现为「画面和声音一起快进」
-- 帧间用 `MessageChannel` 让出主线程（不用 `requestAnimationFrame`，
-  后者在标签页不可见时会被节流甚至暂停，导出会卡住）
-- **运行时探测 AAC 编码能力** —— 部分 Chromium 构建不带 AAC 编码器，
-  此时会禁用「包含音频」并说明原因，不会悄悄产出无声视频
+⚠️ **MP4 导出需要 HTTPS 或 localhost 安全环境**（浏览器对 WebCodecs 的限制，
+前端无法绕过）。用 `http://` 访问时，PNG 帧序列与 GIF 导出仍可正常使用。
+高分辨率、高帧率、复杂图层或长时间动画会显著增加内存与编码负载。
 
-导出完成后状态栏会显示**实际时长**（例如 `时长 17.53 秒`），可直接与文件属性核对。
-导出本身往往只要几秒 —— 编码由浏览器/GPU 完成，很快是正常的；
-若成品播放偏快，检查「结束时间」是否填小了，而不是帧率。
+除导出外还提供「高级功能」面板：关键帧时间轴、自定义字体、文字与图片图层、
+音频编辑与节拍同步、主题库、模板库、分享链接、批量导出队列，以及
+1:1 / 9:16 画幅与多种展示模式。逐项说明见更新日志的 `signal` 栏。
 
 ## 上游数据来源
 
