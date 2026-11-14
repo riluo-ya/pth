@@ -1,81 +1,64 @@
-# SIGNAL — 二次开发说明
+# SIGNAL — 站点集成说明
 
-本目录是 **第三方项目的二次开发版本**，不是 PTH 原创。
+本目录是**第三方项目的二次开发版本**，不是 PTH 原创。
 
 ## 来源
 
 | 项 | 内容 |
 |---|---|
 | 原项目 | [Lylighte/signal-replica](https://github.com/Lylighte/signal-replica) |
-| 原作者 | Lylighte |
+| 原作者 | Lylighte（贡献者：chujiamo、ZENG Alexandre Qizhi） |
 | 原许可证 | MIT（见 `LICENSE-SIGNAL.md`） |
-| 字体 | Saira，SIL Open Font License 1.1（见 `assets/OFL.txt`） |
-| 原 README | 见 `README-SIGNAL.md` |
+| 同步版本 | 上游 `main` 分支，最新提交 `8d2fd6d`（2026-10-29） |
+| 同步范围 | 原仓库 `dist/` 目录全部内容（40 个文件） |
+| 原 README | 见 `README-SIGNAL.md`（原仓库 README 副本） |
 
-## PTH 做了哪些改动（二改内容）
+## PTH 做了哪些改动
 
-1. **接入答题验证**
-   在 `index.html` 的 `<head>` 内同步注入一段校验脚本，验证 `access_token`
-   （时间戳 + djb2 签名，12 小时有效，算法与 `home.html` / `philzy.html` /
-   `pmth.html` / 下载站完全一致）。未通过时显示「访问受限」遮罩，并提供
+PTH **只做站点接入，不改动演出功能本身**。上游 `dist/` 下的 JS / CSS / 素材
+均为原样文件，改动只集中在 `index.html`：
+
+1. **答题验证闸门**：`<head>` 内同步校验 `access_token`
+   （时间戳 + djb2 签名，12 小时有效，算法与导航页 / 答题页 / 蓝奏云 /
+   谱面工坊 / 下载站完全一致）。未通过时显示「访问受限」遮罩，提供
    「前往答题」（带 `?return_to=` 原路返回）与「返回导航中心」两个出口。
 
-2. **顶栏「返回导航」按钮**
-   header 左上角新增返回按钮，指向 `../home.html`（signal 是子目录，站点根在上一层）。
-   窄屏只显示箭头图标。样式沿用页面自身的深色描边风格。
+2. **闸门未通过时不加载演出引擎**：把原本的
+   `<script type="module" src="studio.js">` 改为条件动态 `import()`。
+   这样未验证时连 26 个依赖模块、`audio.wav` 预载和 Canvas 渲染都不会启动。
 
-3. **页面底部署名**
-   右下角固定显示来源：原项目仓库链接 + 「由 PTH 二次开发并接入验证」。
+3. **顶栏「返回导航」按钮**：`header .identity` 左侧新增返回按钮，
+   窄屏只显示箭头图标，样式沿用页面自身的深色描边风格。
+
+4. **页面底部署名**：右下角固定显示原项目仓库链接 + MIT 标识。
    原先指向原仓库的 GitHub 链接保留未动。
 
-4. **答题页白名单同步**
-   `quiz.html` 的回跳白名单新增 `/signal/` 与 `/signal/index.html`，
-   并修正了子目录页面会被误判成「下载站首页」的问题（详见该文件注释）。
+5. **更新日志弹窗**：引入 `../data/changelog-widget.js`，
+   以 `data-scope="signal"` 只显示 SIGNAL 栏的更新记录。
 
-5. **导航中心新增入口**
-   `dl.data`（导航数据）中新增一条指向 `./signal/` 的卡片。
+6. **页面标题**：改为 `SIGNAL · Phigros Tool Hub`。
 
-6. **新增 MP4 导出**
-   原项目只能导出 PNG 帧序列 ZIP。为满足「直接拿到带声音的视频」，新增两个文件：
+## 上游同步方法
 
-   | 文件 | 作用 |
-   |---|---|
-   | `mp4-muxer.js` | 把 H.264 / AAC 裸流封装成标准 MP4（ISO BMFF），纯本地、无第三方依赖 |
-   | `video-export.js` | 用 WebCodecs 把画面编成 H.264、音轨编成 AAC，再交给 muxer 封装 |
+上游更新时，用原仓库 `dist/` 覆盖本目录同名文件，然后重新在 `index.html`
+补上上述 6 处注入即可。JS / CSS / 素材本身不需要差异合并。
 
-   均为**新增文件，未修改原导出逻辑**，`frame-export.js`（PNG 序列）原样保留。
-   为了挂载这两个新模块，`index.html` 与 `studio.js` 各有一处小改动：
-   前者在导出对话框增加「导出格式 / 包含音频 / 视频码率」三个控件，
-   后者按格式分发到 `exportVideo` 或 `exportFrameZip`。
+## 第三方依赖与许可证
 
-   实现要点：
-   - 全程浏览器本地编码，不上传任何数据
-   - 每秒一个关键帧，拖动进度条可快速定位
-   - **以画面为主时间轴**：音频超出画面长度的部分会被裁掉。
-     否则画面播完后声音还在响，观感就是「声音在画面之后才出现」
-   - **时间基准用标准值**：视频轨 `fps×1000`、movie 基准 `1000`（毫秒）。
-     曾用视频轨基准 = fps（`1/30`），数学上等价且 ffmpeg 认，但大量播放器
-     与硬解会误读，表现为「画面和声音一起快进」
-   - AAC 帧时长固定按 1024 采样计算。**不读 `EncodedAudioChunk.duration`** ——
-     它的单位是微秒，当成采样数会让每帧变成约 0.53 秒、整条音轨膨胀到几百秒
-   - 帧与帧之间用 `MessageChannel` 让出主线程，而非 `requestAnimationFrame`。
-     rAF 在标签页不可见时会被节流甚至暂停，导出几百帧时用户一切走就卡住
-   - **运行时探测 AAC 编码能力**：并非所有 Chromium 构建都带 AAC 编码器，
-     不支持时会禁用「包含音频」并给出说明，而不是悄悄导出无声视频
+| 组件 / 资源 | 许可证 | 位置 |
+|---|---|---|
+| SIGNAL Replica 项目代码 | MIT | `LICENSE-SIGNAL.md` |
+| Saira 字体 | SIL Open Font License 1.1 | `assets/OFL.txt` |
+| Mediabunny 1.62.0 | Mozilla Public License 2.0 | `vendor/mediabunny.js`、`vendor/MPL-2.0.txt` |
+| @mediabunny/aac-encoder 1.62.0 | Mozilla Public License 2.0 | 同上 bundle |
+| `assets/audio.wav` | **未提供单独授权说明** | `assets/audio.wav` |
 
-未改动的其他原始文件（`engine.js`、`design.js`、`config.js`、
-`default-settings.js`、`editor-data.js`、`screen-curve.js`、
-`frame-export.js`、`assets/`）均保持原样，以便后续跟随上游更新。
+`vendor/` 里的浏览器端封装由 `npm run build:vendor` 生成，内含 FFmpeg AAC
+编码器的 WebAssembly 构建，详见 `vendor/README.md`。
 
-## 上游同步建议
-
-上游更新时，只需覆盖 `dist/` 下的原始文件，然后重新补上这几处注入即可：
-
-1. `index.html`：闸门脚本、返回按钮、底部署名、导出对话框的三个新控件
-2. `studio.js`：`exportVideo` 的 import 与按格式分发
-
-新增的 `mp4-muxer.js` 与 `video-export.js` 是 PTH 自己的文件，不受上游覆盖影响。
-原始文件本身无需差异合并。
+⚠️ MIT 不代表自动获得仓库中所有第三方音乐、字体、图片的使用许可。
+尤其是 `assets/audio.wav` 未附单独授权说明，在复制、再分发或用于公开及
+商业作品前请自行确认来源与授权范围。用户自行导入的素材仍受其原有版权约束。
 
 ## 归属与免责
 
@@ -83,15 +66,3 @@
 - MIT 要求保留版权声明与许可声明，上方「来源」表与 `LICENSE-SIGNAL.md`
   即为履行该义务，请勿删除。
 - PTH 与 signal-replica 原作者不存在授权、合作或运营关系。
-
-## 视频导出（PTH 二改，本轮新增修复）
-
-`video-export.js` / `mp4-muxer.js` 为 PTH 新增文件，上游没有。本轮针对「导出慢且会失败」做了以下修正：
-
-- **编码器背压**：原先每帧无限制 push，实测 `encodeQueueSize` 恒等于已推送帧数，约 200 帧时标签页崩溃。现在按水位（8）等待 `dequeue`，并带 250ms 兜底超时防止个别实现不派发事件导致卡死。
-- **曲面效果降级**：默认设计 `screenCurve: 'curved'` 走 WebGL，浏览器不支持（硬件加速关闭、显卡被拉黑、上下文丢失）时，原逻辑在第 0 帧整段中断。现改为导出前预检 + 途中丢失时降级为平面继续，并在结果里给出提示。
-- **编码器错误可见**：`error` 回调里直接 `throw` 只会变成未捕获异常，外层 `try/catch` 接不到，界面会一直停在「正在收尾…」。改为记录后由主流程转成正常报错（视频轨与音频轨均改）。
-- **通道复用**：让出主线程的 `MessageChannel` 改为模块级复用，避免几百帧量级上重复创建端口对象。
-- **16:9 直通**：渲染尺寸与输出尺寸一致时直接编码渲染画布，省掉一次 1920×1080 全画布拷贝（仅 4:3 需要中间画布裁切）。
-
-上游原始文件（engine.js / studio.js 等）本轮未改动；`studio.js` 仅新增一行用于显示降级提示。

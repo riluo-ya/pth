@@ -35,7 +35,10 @@ jobs:
                    data/changelog-widget.js data/pth-crypto.js \
                    data/pcd.data data/dl.data data/lz.data \
                    quiz/index.html pmth/index.html philzy/index.html \
-                   signal/index.html download/index.html; do
+                   signal/index.html signal/layout.css signal/studio-features.js \
+                   signal/video-export.js signal/gif-export.js \
+                   signal/vendor/mediabunny.js signal/vendor/MPL-2.0.txt \
+                   download/index.html; do
             if [ -f "./dist/$p" ]; then echo "OK   $p"; else echo "MISS $p"; missing=1; fi
           done
           if [ "$missing" -ne 0 ]; then
