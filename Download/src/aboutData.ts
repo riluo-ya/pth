@@ -6,6 +6,24 @@ export interface UpdateLog {
 export const projectDescription = "Phigros 谱面下载器是一个按曲目浏览 Phigros 资源的项目。此外，它还具备将资源直接导出为可在 Phira 或 RPE 中游玩的谱面文件的实用功能。它还配有简洁易用的用户界面，以及音频播放器（开发中）和特定曲目的异常特效。";
 export const updateLogs: UpdateLog[] = [
     {
+        date: "2026-11-14",
+        content: `
+
+            <ul class="list-disc list-inside space-y-1">
+                <li>访问与更新日志修复</li>
+                <li>- 修复其他页面读不出更新日志：组件加版本号、按当前页面推导数据地址，加载失败给出错误提示与重试</li>
+                <li>- 更新日志改为按天分栏，各页面只看自己那一栏；新增「其他」栏放整站杂事</li>
+                <li>- 下载站去掉右下角浮动日志按钮，统一在顶栏「关于」里查看</li>
+                <li>http 也能正常用</li>
+                <li>- 新增 data/pth-crypto.js：http 下自动改由纯 JS 解密题库，https 仍走原生</li>
+                <li>- 答题页不再因 http 报「环境检测未通过」，下载站也不会被误挡成「访问受限」</li>
+                <li>- 分享卡片「复制图片」在 http 下不可用时提示改用「下载图片」</li>
+                <li>答题与安全</li>
+                <li>- 连续答错 5 次硬锁 5 分钟，冻结界面只保留管理员密码，删掉自助解锁入口</li>
+            </ul>
+        `,
+    },
+    {
         date: "2026-11-13",
         content: `
 
