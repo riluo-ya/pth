@@ -783,6 +783,33 @@ SIGNAL 统一用浮动按钮 + 居中弹窗（强调色各不相同），导航�
 否则浏览器 / CDN 会继续用缓存里的旧组件，与新 JSON 结构错配。
 CI 的 `Verify dist layout` 现在会在 `data/changelog-widget.js` 等必要文件缺失时直接失败。
 
+### 用 http 访问也能正常用
+
+浏览器只在**安全上下文**（`https://`、`localhost`、`file:`）里开放 `crypto.subtle`，
+而导航页 / 答题页 / 蓝奏云页要用它解密 `data/` 下的 `.data` 文件。以前用 `http://`
+打开时，答题页会直接报「Web Crypto API 不可用」，拿不到凭证，下载站跟着被 `AuthGate`
+挡住 —— 看起来像是下载站坏了，其实是答题页没解开题库。
+
+现在引入了 **`data/pth-crypto.js`** 兼容层：
+
+- **https**：仍走原生 Web Crypto，速度不变
+- **http**：浏览器不给 `crypto.subtle`，自动切到文件自带的纯 JS 实现
+  （PBKDF2-HMAC-SHA256 + AES-256-GCM），**`.data` 文件格式完全不用改**
+- 三个页面只需在 `</head>` 前引一行脚本，`decryptData` 统一调 `PthCrypto.decrypt()`
+- 纯 JS 首次派生密钥约 **1~2 秒**（手机可能更久），结果缓存在 `sessionStorage`，
+  之后同标签页内再进任何页面都是秒开；页面加载时会自动显示一句「首次解密数据约需 1~2 秒」
+- `checkEnvironment()` 不再把「没有 subtle」当错误，只保留 `file://` 的提示
+
+三个页面的引用都用**相对路径**（根页面 `./data/`、`quiz/` 与 `philzy/` 用 `../data/`），
+自定义域名没生效、走 `xxx.github.io/pth/` 子路径时同样能命中。
+
+**仍未绕过的浏览器限制**：`http` 下 `navigator.clipboard` 通常不可用，分享卡片点
+「复制图片」会弹出提示，改用「下载图片」或长按保存即可 —— 这是浏览器行为，前端改不了。
+另外 http 是明文传输，证书能签下来还是建议勾 **Enforce HTTPS**。
+
+独立的数据管理工具（`pth_数据管理工具.html`）仍建议通过 `http://localhost:...` 打开；
+直接双击用 `file://` 打开时，浏览器同样不开放 Web Crypto，题库加解密会失效。
+
 ### 本地与部署
 
 ```bash
