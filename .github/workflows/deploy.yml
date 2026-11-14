@@ -32,7 +32,7 @@ jobs:
           echo "--- 必须存在的路径 ---"
           missing=0
           for p in index.html CNAME data/changelog.json data/faq.json \
-                   data/changelog-widget.js \
+                   data/changelog-widget.js data/pth-crypto.js \
                    data/pcd.data data/dl.data data/lz.data \
                    quiz/index.html pmth/index.html philzy/index.html \
                    signal/index.html download/index.html; do

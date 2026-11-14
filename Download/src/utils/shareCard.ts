@@ -1160,7 +1160,10 @@ export function downloadCanvas(canvas: HTMLCanvasElement, filename: string): Pro
 
 /** 复制图片到剪贴板（不支持时返回 false，由调用方降级提示） */
 export async function copyCanvas(canvas: HTMLCanvasElement): Promise<boolean> {
-    if (!navigator.clipboard || !window.isSecureContext || typeof ClipboardItem === 'undefined') {
+    // 不再用 window.isSecureContext 一票否决：http 下 navigator.clipboard
+    // 可能不存在，也可能存在但 write() 被拒，交给下面的 try/catch 处理。
+    // 失败时调用方会提示改用「下载图片」，不会中断分享卡片。
+    if (!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === 'undefined') {
         return false;
     }
     try {

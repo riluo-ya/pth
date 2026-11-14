@@ -489,7 +489,7 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
                 <NoticeDialog
                     tone="info"
                     eyebrow="COPY NOT SUPPORTED"
-                    title="当前浏览器不支持直接复制图片"
+                    title="当前环境不支持直接复制图片"
                     onClose={() => setCopyNotice(false)}
                     actions={
                         <Button variant="primary" onClick={() => setCopyNotice(false)}>
@@ -498,6 +498,7 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
                     }
                 >
                     <p className="text-[13px] leading-[1.6] text-slate-300">
+                        用 http 访问或浏览器限制时会出现这种情况，不影响卡片本身。
                         你可以长按预览图保存到相册，或点「下载图片」把卡片存下来。
                     </p>
                 </NoticeDialog>

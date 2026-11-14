@@ -356,6 +356,7 @@
             display: none;
         }
     </style>
+    <script src="./data/pth-crypto.js"></script>
 </head>
 <body>
 
@@ -463,25 +464,35 @@
         }
 
         // 检测运行环境
+        // http:// 下浏览器不开放 crypto.subtle，改由 data/pth-crypto.js
+        // 的纯 JS PBKDF2 + AES-GCM 兜底，所以「没有 subtle」不再算错误。
         function checkEnvironment() {
             const issues = [];
-            if (!window.crypto || !window.crypto.subtle) {
-                issues.push('Web Crypto API 不可用');
+            const hasFallback = !!(window.PthCrypto && window.PthCrypto.decrypt);
+            if ((!window.crypto || !window.crypto.subtle) && !hasFallback) {
+                issues.push('题库解密组件未加载，且浏览器不支持 Web Crypto API');
             }
             if (location.protocol === 'file:') {
-                issues.push('当前通过 file:// 协议打开，Web Crypto API 被浏览器禁用');
+                issues.push('当前通过 file:// 直接打开文件，无法加载数据文件');
             }
             return issues;
         }
 
         async function decryptData(encryptedBase64, password) {
+            // 统一走 data/pth-crypto.js：https 用原生 Web Crypto，
+            // http 下自动切纯 JS 实现，读的是同一种 .data 格式。
+            if (window.PthCrypto && window.PthCrypto.decrypt) {
+                return window.PthCrypto.decrypt(encryptedBase64, password);
+            }
+            // 兼容层没加载成功时，仍尝试原生（https / localhost 可用）
             const encoder = new TextEncoder();
             const data = Uint8Array.from(atob(encryptedBase64), c => c.charCodeAt(0));
-            
             const salt = data.slice(0, 16);
             const iv = data.slice(16, 28);
             const ciphertext = data.slice(28);
-            
+            if (!window.crypto || !window.crypto.subtle) {
+                throw new Error('题库解密组件未加载：请确认 data/pth-crypto.js 能正常访问');
+            }
             const keyMaterial = await crypto.subtle.importKey(
                 "raw", encoder.encode(password), "PBKDF2", false, ["deriveKey"]
             );
@@ -489,7 +500,6 @@
                 { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
                 keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
             );
-            
             const decrypted = await crypto.subtle.decrypt(
                 { name: "AES-GCM", iv: iv }, key, ciphertext
             );
@@ -770,6 +780,6 @@
         // 启动
         init();
     </script>
-    <script src="/data/changelog-widget.js?v=20261113e" data-scope="all" data-variant="inline" data-accent="#22d3ee"></script>
+    <script src="./data/changelog-widget.js?v=20261113e" data-scope="all" data-variant="inline" data-accent="#22d3ee"></script>
 </body>
 </html>
