@@ -8,6 +8,7 @@
 //   "logs": [
 //     {
 //       "date": "2026-11-13",
+//       "tags": { "download": "修复", "pmth": "", "signal": "", "other": "调整" },
 //       "pages": {
 //         "download": "下载站这次改了什么",
 //         "pmth":     "谱面工坊这次改了什么",
@@ -22,6 +23,7 @@
 // 没有对应子页面，只在导航页 / 蓝奏云（scope=all）的全部视图里出现。
 // 导航页 / 蓝奏云显示全部非空分栏；其余各页只取自己那一栏，
 // 自己那栏没填则这一整天不出现；所有天都没内容显示「暂无信息」。
+// tags 里每栏可选一个小标签（新增 / 修复 / 优化 / bug 等），显示在正文前的小框框里。
 // 每栏正文用 \n 换行，一行 = 一个列表项；也可以直接写 HTML，会原样渲染。
 // 兼容：早期平铺格式（date/scope/content）与 contentByScope 分段格式仍可读取。
 // ============================================================
@@ -146,6 +148,8 @@ interface RawLog {
     date?: string;
     /** 新格式：一天里按页面分栏，没填的键就是空的 */
     pages?: Record<string, string>;
+    /** 每栏可选的小标签，留空就不显示 */
+    tags?: Record<string, string>;
     /** 旧格式兼容字段 */
     content?: string;
     scope?: string[] | string;
@@ -156,6 +160,7 @@ interface DaySection {
     id: string;
     name: string;
     content: string;
+    tag: string;
 }
 
 const PAGES: { id: string; name: string }[] = [
@@ -169,9 +174,14 @@ const PAGES: { id: string; name: string }[] = [
 function sectionsOf(log: RawLog): DaySection[] {
     const out: DaySection[] = [];
     if (log.pages && typeof log.pages === 'object' && !Array.isArray(log.pages)) {
+        const tags = (log.tags && typeof log.tags === 'object' && !Array.isArray(log.tags))
+            ? log.tags : null;
         for (const p of PAGES) {
             const c = log.pages[p.id];
-            if (typeof c === 'string' && c.trim()) out.push({ id: p.id, name: p.name, content: c });
+            if (typeof c === 'string' && c.trim()) {
+                const tag = tags && typeof tags[p.id] === 'string' ? tags[p.id].trim() : '';
+                out.push({ id: p.id, name: p.name, content: c, tag });
+            }
         }
         return out;
     }
@@ -188,10 +198,10 @@ function sectionsOf(log: RawLog): DaySection[] {
         const raw = anyPart
             ? ((typeof parts?.[p.id] === 'string' && parts[p.id].trim()) ? parts[p.id] : log.content)
             : log.content;
-        if (typeof raw === 'string' && raw.trim()) out.push({ id: p.id, name: p.name, content: raw });
+        if (typeof raw === 'string' && raw.trim()) out.push({ id: p.id, name: p.name, content: raw, tag: '' });
     }
     if (!out.length && typeof log.content === 'string' && log.content.trim()) {
-        out.push({ id: 'download', name: '下载站', content: log.content });
+        out.push({ id: 'download', name: '下载站', content: log.content, tag: '' });
     }
     return out;
 }
@@ -217,16 +227,20 @@ export function normalizeLogs(data: unknown, scope = 'all'): UpdateLog[] {
         if (!visible.length) continue;
 
         let content: string;
+        let tag = '';
         if (visible.length === 1) {
             content = renderContent(visible[0].content);
+            tag = visible[0].tag;
         } else {
             content = visible.map(s =>
-                `<p class="font-semibold text-brand-cyan mt-3 first:mt-0">${escapeHtml(s.name)}</p>` +
+                `<p class="font-semibold text-brand-cyan mt-3 first:mt-0">` +
+                (s.tag ? `<span class="inline-block mr-1.5 px-1.5 py-[1px] rounded-full text-[10px] align-middle border border-slate-500/40 bg-slate-400/10 text-slate-300">${escapeHtml(s.tag)}</span>` : '') +
+                `${escapeHtml(s.name)}</p>` +
                 renderContent(s.content)
             ).join('');
         }
         if (!content) continue;
-        out.push({ date: log.date ? String(log.date) : '', content });
+        out.push({ date: log.date ? String(log.date) : '', content, tag });
     }
     return out;
 }

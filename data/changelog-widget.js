@@ -2,8 +2,10 @@
  * PTH 统一更新日志组件
  * ------------------------------------------------------------
  * 数据只有一份：/data/changelog.json
- * 数据结构：logs[] 里每个元素 = 一天，字段 date + pages。
+ * 数据结构：logs[] 里每个元素 = 一天，字段 date + pages + tags。
  *   pages 里按栏目分栏：{ download, pmth, signal, other }
+ *   tags  里给每个栏目一个可选的小标签：{ download: '修复', ... }，
+ *         显示在正文前的小框框里；留空或缺失就不显示。
  *   download/pmth/signal 对应三个子页面；other 是「其他 / 站点级」更新
  *   （导航页改版、域名更替、目录调整等不属于某个子页面的内容）。
  *   想填哪个就填哪个，没填的就是空的。
@@ -38,7 +40,7 @@
     var scope = (tag.getAttribute('data-scope') || 'all').toLowerCase();
     var variant = tag.getAttribute('data-variant') || 'dock';
     var accent = tag.getAttribute('data-accent') || '#22d3ee';
-    var WIDGET_VERSION = '2026.11.13-e';
+    var WIDGET_VERSION = '2026.11.15-a';
 
     // 优先用「脚本自己所在目录」推导 JSON 地址：无论站点挂在域名根还是
     // 子路径（例如还没绑自定义域名时的 /pth/），这个地址永远指向同一份数据。
@@ -91,6 +93,20 @@
     ];
     var wanted = scope.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
+    /* 小标签按类别配低饱和色，尽量不抢正文 */
+    var KIND_CLASS = {
+        '修复': 'k-fix', 'bug': 'k-fix', '兼容': 'k-fix', '缺陷': 'k-fix',
+        '新增': 'k-add', '功能': 'k-add', '优化': 'k-add', '性能': 'k-add',
+        '界面': 'k-add', '数据': 'k-add', '补充': 'k-add',
+        '安全': 'k-sec'
+    };
+    function kindClass(tag) { return KIND_CLASS[tag] || ''; }
+    function kindHtml(tag) {
+        if (!tag || typeof tag !== 'string' || !tag.trim()) return '';
+        var v = tag.trim();
+        return '<span class="pth-cl-kind ' + kindClass(v) + '">' + esc(v) + '</span>';
+    }
+
     /**
      * 把「一天」归一成 { date, sections: [{ id, name, content }] }。
      * 新格式看 pages；没填的键（缺失或空串）就是空的，不生成 section。
@@ -104,10 +120,13 @@
         var pages = (log.pages && typeof log.pages === 'object' && !Array.isArray(log.pages))
             ? log.pages : null;
         if (pages) {
+            var tags = (log.tags && typeof log.tags === 'object' && !Array.isArray(log.tags))
+                ? log.tags : null;
             PAGES.forEach(function (p) {
                 var c = pages[p.id];
                 if (typeof c === 'string' && c.trim()) {
-                    sections.push({ id: p.id, name: p.name, content: c });
+                    var tg = (tags && typeof tags[p.id] === 'string') ? tags[p.id].trim() : '';
+                    sections.push({ id: p.id, name: p.name, content: c, tag: tg });
                 }
             });
             return { date: date, sections: sections };
@@ -131,12 +150,12 @@
                 c = log.content;
             }
             if (typeof c === 'string' && c.trim()) {
-                sections.push({ id: p.id, name: p.name, content: c });
+                sections.push({ id: p.id, name: p.name, content: c, tag: '' });
             }
         });
         // 旧格式若完全没写 scope，兜底归到 download
         if (!sections.length && typeof log.content === 'string' && log.content.trim()) {
-            sections.push({ id: 'download', name: '下载站', content: log.content });
+            sections.push({ id: 'download', name: '下载站', content: log.content, tag: '' });
         }
         return { date: date, sections: sections };
     }
@@ -176,7 +195,8 @@
                 '</div>';
             day.sections.forEach(function (s) {
                 html += '<article class="pth-cl-entry">' +
-                    '<div class="pth-cl-tags"><span class="pth-cl-tag' +
+                    '<div class="pth-cl-tags">' + kindHtml(s.tag) +
+                    '<span class="pth-cl-tag' +
                     (s.id === 'other' ? ' is-other' : '') + '">' + esc(s.name) + '</span></div>' +
                     '<div class="pth-cl-body">' + bodyHtml(s.content) + '</div>' +
                     '</article>';
@@ -251,7 +271,12 @@
         '.pth-cl-entry{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);',
         'border-radius:9px;padding:10px 12px;margin-bottom:8px;}',
         '.pth-cl-entry:last-child{margin-bottom:0;}',
-        '.pth-cl-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;}',
+        '.pth-cl-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center;}',
+        '.pth-cl-kind{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;line-height:1.5;',
+        'color:#94a3b8;background:rgba(148,163,184,.09);border:1px solid rgba(148,163,184,.22);}',
+        '.pth-cl-kind.k-fix{color:#fbbf24;background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.24);}',
+        '.pth-cl-kind.k-add{color:#67e8f9;background:rgba(34,211,238,.07);border-color:rgba(34,211,238,.20);}',
+        '.pth-cl-kind.k-sec{color:#fca5a5;background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.22);}',
         '.pth-cl-tag{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;line-height:1.5;',
         'color:var(--pth-cl-accent);background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.28);}',
         '.pth-cl-tag.is-all{color:#fbbf24;background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.30);}',
@@ -395,7 +420,7 @@
                 // 继续换下一个源，而不是静默显示「暂无信息」。
                 var recognized = data.logs.some(function (l) {
                     return l && typeof l === 'object' &&
-                        (l.pages || typeof l.content === 'string' || l.contentByScope);
+                        (l.pages || typeof l.content === 'string' || l.contentByScope || l.tags);
                 });
                 if (data.logs.length && !recognized) throw new Error('日志结构不认识');
                 console.info('[changelog] 命中数据源 ' + (i + 1) + '：' + base);

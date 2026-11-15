@@ -2,11 +2,14 @@ export interface UpdateLog {
     date: string;
     content: string;
     scope?: string[];
+    /** 正文前的小标签，留空不显示 */
+    tag?: string;
 }
 export const projectDescription = "Phigros 谱面下载器是一个按曲目浏览 Phigros 资源的项目。此外，它还具备将资源直接导出为可在 Phira 或 RPE 中游玩的谱面文件的实用功能。它还配有简洁易用的用户界面，以及音频播放器（开发中）和特定曲目的异常特效。";
 export const updateLogs: UpdateLog[] = [
     {
         date: "2026-11-14",
+        tag: "修复",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -22,6 +25,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-11-13",
+        tag: "修复",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -33,6 +37,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-10-17",
+        tag: "优化",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -65,6 +70,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-10-01",
+        tag: "优化",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -75,6 +81,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-09-29",
+        tag: "修复",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -87,6 +94,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-09-28",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -97,6 +105,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-09-27",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -109,6 +118,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-09-27",
+        tag: "调整",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -119,6 +129,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-03-08",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -130,6 +141,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-02-28",
+        tag: "修复",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -141,6 +153,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-02-25",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -152,6 +165,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-01-22",
+        tag: "补充",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -163,6 +177,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-01-19",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
@@ -174,6 +189,7 @@ export const updateLogs: UpdateLog[] = [
     },
     {
         date: "2026-01-18",
+        tag: "新增",
         content: `
 
             <ul class="list-disc list-inside space-y-1">
