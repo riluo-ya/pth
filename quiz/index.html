@@ -99,6 +99,11 @@
             <p>您已连续答错 5 次，暂时无法继续答题。</p>
             <p>请等待下方倒计时结束，或输入管理员密码提前解除。</p>
             <div class="timer-display" id="freeze-timer">5:00</div>
+            <p id="freeze-hint" style="margin: 0 0 6px; font-size: 0.9rem; line-height: 1.65; color: #b45309;">正在获取云端时间…</p>
+            <p style="margin: 0 0 18px; font-size: 0.86rem; line-height: 1.7; color: #6b7280;">
+                请保持本页打开并联网，<strong>必须在本页实际待满 5 分钟</strong>才会解封。<br>
+                关闭页面期间不计时，回来后接着算；刷新页面不会重置。时间以服务器为准，调系统时间无效。
+            </p>
             <div style="margin: 20px 0; color: #6b7280; font-size: 0.9rem;">— 或输入管理员密码解除 —</div>
             <div class="unlock-form">
                 <div class="input-group">
@@ -171,6 +176,9 @@
         // ================= 常量定义 =================
         const SESSION_DURATION_MS = 5 * 60 * 1000;
         const FREEZE_DURATION_MS = 5 * 60 * 1000;   // 答错 5 次硬锁 5 分钟
+        const FREEZE_STATE_KEY = 'pth_freeze_state';  // 冻结状态：云端锚点 + 本页单调累计
+        const SERVER_TIME_RETRY_MS = 10000;  // 取不到云端时间时的重试间隔
+        const SERVER_TIME_TIMEOUT_MS = 8000;
         const MAX_FAILURES = 5;
         const TARGET_MD5 = MD5('riluoya');
         const SESSION_INFO_KEY = 'current_session_info';
@@ -405,6 +413,11 @@
         let isSubmitting = false;
         let freezeTimerInterval = null;
         let isPerformingAutoSwitch = false;
+        let freezeState = null;
+        let freezeLastMono = 0;
+        let freezePersistBound = false;
+        let serverTimeInFlight = false;
+        let serverTimeRetryTimer = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             returnTo = readReturnTo();
@@ -415,48 +428,221 @@
             initQuiz();
         });
 
-        function checkFreezeStatus() {
-            const lastFailedTime = localStorage.getItem('last_failed_time');
-            if (lastFailedTime) {
-                const now = Date.now();
-                const elapsed = now - parseInt(lastFailedTime);
-                if (elapsed < FREEZE_DURATION_MS) {
-                    startFreezeUI(FREEZE_DURATION_MS - elapsed);
-                    return true;   // 冻结中，后续初始化全部停下
-                }
-                clearFreezeState();   // 时间已到，正常放行
+        // ---- 冻结计时：云端时间锚点 + 本页单调累计 ----
+        // 连续答错 5 次时，请求一次同源响应的 Date 头作为「锁定开始的服务器时间」。
+        // 正常访问网站（导航页 / 下载站 / 未锁定的答题页）不会发任何时间请求；
+        // 只有锁定流程才会请求：① 触发锁定时取锚点，② 待满 5 分钟后联网确认解封。
+        // Date 头是服务器生成的 GMT 绝对时间，解析不依赖本地时钟；
+        // performance.now() 是单调时钟，不受改系统时间影响。
+        // 解封需要同时满足：本页累计待满 5 分钟 + 云端时间确实过了 5 分钟。
+        // 断网取不到云端时间就一直锁着（fail-closed），每 10 秒重试，直到联网。
+        // 本站题库、曲库索引、曲绘与音频都要联网才能用，离线本来就用不了。
+        const HAS_MONO = typeof performance !== 'undefined'
+            && typeof performance.now === 'function';
+
+        /** 读同源响应的 Date 头；HEAD 当前页面即可，不需要额外接口 */
+        async function fetchServerTime() {
+            if (typeof fetch !== 'function') throw new Error('fetch unavailable');
+            const url = location.pathname + '?_t=' + Date.now()
+                + '&_r=' + Math.random().toString(36).slice(2);
+            let ctrl = null, timer = null;
+            if (typeof AbortController === 'function') {
+                ctrl = new AbortController();
+                timer = setTimeout(() => ctrl.abort(), SERVER_TIME_TIMEOUT_MS);
             }
-            return false;
+            try {
+                const opts = { method: 'HEAD', cache: 'no-store' };
+                if (ctrl) opts.signal = ctrl.signal;
+                const res = await fetch(url, opts);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const raw = (res.headers && res.headers.get)
+                    ? res.headers.get('Date') : null;
+                const ms = raw ? Date.parse(raw) : NaN;
+                // Date.parse 解析 GMT 字符串得到 UTC 绝对毫秒，不读本地系统时间
+                if (!isFinite(ms) || ms <= 0) throw new Error('no Date header');
+                return ms;
+            } finally {
+                if (timer) clearTimeout(timer);
+            }
+        }
+
+        function readFreezeState() {
+            let s = null;
+            try {
+                const raw = localStorage.getItem(FREEZE_STATE_KEY);
+                if (raw) s = JSON.parse(raw);
+            } catch (e) { s = null; }
+            if (s && s.v === 3 && typeof s.accum === 'number'
+                && isFinite(s.accum) && s.accum >= 0
+                && (s.anchor === null || (typeof s.anchor === 'number' && isFinite(s.anchor)))) {
+                return s;
+            }
+            // 旧版状态迁移：保留已累计时长，锚点待联网补齐。
+            // 补锚点时会减去已有累计，把服务器时间回推到「锁定开始」那一刻。
+            if (s && s.v === 2 && typeof s.accum === 'number' && isFinite(s.accum)) {
+                const m = { v: 3, anchor: null,
+                    accum: Math.max(0, Math.min(s.accum, FREEZE_DURATION_MS)) };
+                saveFreezeState(m);
+                return m;
+            }
+            const legacy = localStorage.getItem('last_failed_time');
+            if (legacy) {
+                const m = { v: 3, anchor: null, accum: 0 };
+                saveFreezeState(m);
+                localStorage.removeItem('last_failed_time');
+                return m;
+            }
+            return null;
+        }
+
+        function saveFreezeState(s) {
+            try { localStorage.setItem(FREEZE_STATE_KEY, JSON.stringify(s)); } catch (e) {}
         }
 
         function clearFreezeState() {
-            localStorage.removeItem('last_failed_time');
-            localStorage.removeItem('failed_count');
+            try {
+                localStorage.removeItem(FREEZE_STATE_KEY);
+                localStorage.removeItem('last_failed_time');
+                localStorage.removeItem('failed_count');
+            } catch (e) {}
+            freezeState = null;
+            clearInterval(freezeTimerInterval);
+            if (serverTimeRetryTimer) {
+                clearTimeout(serverTimeRetryTimer);
+                serverTimeRetryTimer = null;
+            }
         }
 
-        function startFreezeUI(remainingMs) {
-            showLoading(false);
-            document.getElementById('quiz-container').style.display = 'none';
-            document.getElementById('submit-area').style.display = 'none';
-            document.getElementById('locked-container').style.display = 'block';
+        function checkFreezeStatus() {
+            freezeState = readFreezeState();
+            if (!freezeState) return false;
+            startFreezeUI();
+            return true;   // 冻结中，后续初始化全部停下
+        }
 
+        function fmtLeft(ms) {
+            const left = Math.max(0, FREEZE_DURATION_MS - ms);
+            const mins = Math.floor(left / 60000);
+            const secs = Math.floor((left % 60000) / 1000);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function renderFreeze() {
             const timerEl = document.getElementById('freeze-timer');
-            freezeTimerInterval = setInterval(() => {
-                remainingMs -= 1000;
-                if (remainingMs <= 0) {
-                    clearInterval(freezeTimerInterval);
-                    clearFreezeState();
-                    location.reload();
+            const hintEl = document.getElementById('freeze-hint');
+            if (!freezeState) return;
+            if (timerEl) timerEl.innerText = fmtLeft(freezeState.accum);
+            if (!hintEl) return;
+            if (freezeState.anchor === null) {
+                hintEl.innerText = '需要联网校准时间：正在连接服务器…联网成功后才会开始计时';
+                hintEl.style.color = '#b45309';
+            } else if (freezeState.accum >= FREEZE_DURATION_MS) {
+                hintEl.innerText = '已在本页待满 5 分钟，正在联网确认…断网会一直等到能联网为止';
+                hintEl.style.color = '#b45309';
+            } else {
+                hintEl.innerText = '云端时间已校准，倒计时进行中';
+                hintEl.style.color = '#6b7280';
+            }
+        }
+
+        function scheduleServerRetry() {
+            if (serverTimeRetryTimer || !freezeState) return;
+            serverTimeRetryTimer = setTimeout(() => {
+                serverTimeRetryTimer = null;
+                maybeConfirmUnlock();
+            }, SERVER_TIME_RETRY_MS);
+        }
+
+        /** 只在两种时刻发时间请求：锚点未建立、或已待满 5 分钟待联网确认 */
+        async function maybeConfirmUnlock() {
+            if (!freezeState || serverTimeInFlight) return;
+            const needAnchor = freezeState.anchor === null;
+            const needConfirm = !needAnchor && freezeState.accum >= FREEZE_DURATION_MS;
+            if (!needAnchor && !needConfirm) return;
+
+            serverTimeInFlight = true;
+            try {
+                const serverMs = await fetchServerTime();
+                if (!freezeState) return;
+                if (needAnchor) {
+                    // 锚点 = 服务器当前时间 - 已经在本页累计的时长
+                    freezeState.anchor = serverMs - freezeState.accum;
+                    // 从现在起重新取单调基线，等待联网的这段时间不计入
+                    freezeLastMono = HAS_MONO ? performance.now() : 0;
+                    saveFreezeState(freezeState);
+                    renderFreeze();
                 } else {
-                    const mins = Math.floor(remainingMs / 60000);
-                    const secs = Math.floor((remainingMs % 60000) / 1000);
-                    timerEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    const serverElapsed = serverMs - freezeState.anchor;
+                    if (serverElapsed >= FREEZE_DURATION_MS
+                        && freezeState.accum >= FREEZE_DURATION_MS) {
+                        clearFreezeState();
+                        location.reload();
+                        return;
+                    }
+                    // 拿到的是陈旧/缓存的 Date 头：继续等，稍后重试
                 }
-            }, 1000);
-            
-            const mins = Math.floor(remainingMs / 60000);
-            const secs = Math.floor((remainingMs % 60000) / 1000);
-            timerEl.innerText = `${mins}:${secs.toString().padStart(2, '0')}`;
+            } catch (e) {
+                // 断网 / 超时：保持锁定，不做任何放行
+            } finally {
+                serverTimeInFlight = false;
+            }
+            if (freezeState && (freezeState.anchor === null
+                || freezeState.accum >= FREEZE_DURATION_MS)) {
+                scheduleServerRetry();
+            }
+        }
+
+        function startFreezeUI() {
+            showLoading(false);
+            ['quiz-container', 'submit-area', 'error-display'].forEach(id => {
+                const e = document.getElementById(id);
+                if (e) e.style.display = 'none';
+            });
+            document.getElementById('locked-container').style.display = 'block';
+            if (sessionTimerInterval) {
+                clearInterval(sessionTimerInterval);
+                sessionTimerInterval = null;
+            }
+
+            // 本会话起点：performance.now() 刷新后归零，累计值已存盘，
+            // 只用它算「本次页面打开期间」的增量再累加。关闭页面期间不累计。
+            freezeLastMono = HAS_MONO ? performance.now() : 0;
+            clearInterval(freezeTimerInterval);
+            freezeTimerInterval = setInterval(() => {
+                if (!freezeState) { clearInterval(freezeTimerInterval); return; }
+                // 锚点没拿到（断网）时不计时，联网校准后才开始
+                if (freezeState.anchor !== null) {
+                    if (HAS_MONO) {
+                        const nowMono = performance.now();
+                        const delta = nowMono - freezeLastMono;
+                        freezeLastMono = nowMono;
+                        // 后台标签页被节流时，差值仍含被跳过的真实时间
+                        if (delta > 0 && isFinite(delta)) {
+                            freezeState.accum = Math.min(FREEZE_DURATION_MS,
+                                freezeState.accum + delta);
+                        }
+                    } else {
+                        // 极老浏览器没有单调时钟：退化为本地墙钟累计，
+                        // 但解封仍必须过云端确认，改系统时间无法单独放行
+                        freezeState.accum = Math.min(FREEZE_DURATION_MS,
+                            freezeState.accum + 500);
+                    }
+                    saveFreezeState(freezeState);
+                }
+                renderFreeze();
+                maybeConfirmUnlock();
+            }, 500);
+
+            // 页面隐藏 / 关闭前把累计落盘，避免最后一段没存上
+            if (!freezePersistBound) {
+                freezePersistBound = true;
+                const persist = () => { if (freezeState) saveFreezeState(freezeState); };
+                window.addEventListener('pagehide', persist);
+                window.addEventListener('beforeunload', persist);
+                document.addEventListener('visibilitychange', persist);
+            }
+            renderFreeze();
+            maybeConfirmUnlock();   // 触发锁定时取云端锚点（或满 5 分钟时确认）
         }
 
         window.checkUnlock = function() {
@@ -471,7 +657,7 @@
             if (MD5(userPwd) === TARGET_MD5) {
                 errorMsg.style.display = 'none';
                 input.value = '';
-                clearFreezeState();
+                clearFreezeState();   // 同时停掉倒计时与云端时间重试
                 document.getElementById('locked-container').style.display = 'none';
                 const banner = document.getElementById('token-banner');
                 if (banner) banner.style.display = 'none';
@@ -810,7 +996,12 @@
                         location.href = target;
                     });
                 } else {
-                    incrementFailureCount();
+                    const frozen = incrementFailureCount();
+                    if (frozen) {
+                        // 已切到锁定界面，不再弹「请重新作答」
+                        isSubmitting = false;
+                        return;
+                    }
                     showModal('提示', '答题有误，请重新作答！', null, () => {
                         isSubmitting = false;
                         btn.innerText = "提交答案";
@@ -829,13 +1020,18 @@
 
         function incrementFailureCount() {
             let count = parseInt(localStorage.getItem('failed_count') || '0', 10);
+            if (!isFinite(count) || count < 0) count = 0;
             count++;
             localStorage.setItem('failed_count', count.toString());
             if (count >= MAX_FAILURES) {
-                localStorage.setItem('last_failed_time', Date.now().toString());
-                clearInterval(freezeTimerInterval);
-                location.reload();
+                // 不 reload，避免打断云端时间请求；直接切到锁定界面，
+                // 由 startFreezeUI 发起唯一一次「触发锁定时」的时间请求。
+                freezeState = { v: 3, anchor: null, accum: 0 };
+                saveFreezeState(freezeState);
+                startFreezeUI();
+                return true;
             }
+            return false;
         }
 
         async function generateAndSaveToken() {
