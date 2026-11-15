@@ -171,7 +171,14 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
                                             key={i}
                                             className="bg-slate-800/50 rounded-lg p-4 text-slate-300 text-sm border border-slate-700/50"
                                         >
-                                            {log.tag && <div className="mb-2"><LogTag tag={log.tag} /></div>}
+                                            {(() => {
+                                                const ts = log.tags?.length ? log.tags : (log.tag ? [log.tag] : []);
+                                                return ts.length ? (
+                                                    <div className="mb-2 flex flex-wrap gap-1">
+                                                        {ts.map((tg, ti) => <LogTag key={ti} tag={tg} />)}
+                                                    </div>
+                                                ) : null;
+                                            })()}
                                             <div dangerouslySetInnerHTML={{ __html: log.content }} />
                                         </div>
                                     ))}
@@ -196,7 +203,14 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
                                         <div className="space-y-3">
                                             {group.items.map((log, i) => (
                                                 <div key={i} className={i > 0 ? 'pt-3 border-t border-slate-700/50' : ''}>
-                                                    {log.tag && <div className="mb-2"><LogTag tag={log.tag} /></div>}
+                                                    {(() => {
+                                                const ts = log.tags?.length ? log.tags : (log.tag ? [log.tag] : []);
+                                                return ts.length ? (
+                                                    <div className="mb-2 flex flex-wrap gap-1">
+                                                        {ts.map((tg, ti) => <LogTag key={ti} tag={tg} />)}
+                                                    </div>
+                                                ) : null;
+                                            })()}
                                                     <div dangerouslySetInnerHTML={{ __html: log.content }} />
                                                 </div>
                                             ))}

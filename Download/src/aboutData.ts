@@ -4,6 +4,8 @@ export interface UpdateLog {
     scope?: string[];
     /** 正文前的小标签，留空不显示 */
     tag?: string;
+    /** 新格式：可同时显示多个小标签 */
+    tags?: string[];
 }
 export const projectDescription = "Phigros 谱面下载器是一个按曲目浏览 Phigros 资源的项目。此外，它还具备将资源直接导出为可在 Phira 或 RPE 中游玩的谱面文件的实用功能。它还配有简洁易用的用户界面，以及音频播放器（开发中）和特定曲目的异常特效。";
 export const updateLogs: UpdateLog[] = [

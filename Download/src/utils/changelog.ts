@@ -2,30 +2,27 @@
 // 更新日志：从外部 changelog.json 拉取并渲染
 // 改完推送 changelog.json 就能更新，不用动代码重新构建
 //
-// 全站共用一个文件：/data/changelog.json
+// 全站共用一个文件：/data/changelog.json，统一结构：
 // {
 //   "notice": "置顶公告，不需要就留空字符串或删掉",
 //   "logs": [
 //     {
-//       "date": "2026-11-13",
-//       "tags": { "download": "修复", "pmth": "", "signal": "", "other": "调整" },
-//       "pages": {
-//         "download": "下载站这次改了什么",
-//         "pmth":     "谱面工坊这次改了什么",
-//         "signal":   "",                // 没填 = 空的，SIGNAL 这天没有更新
-//         "other":    "站点改版 / 域名更换等不属于某个子页面的更新"
-//       }
+//       "date": "2026-11-15",
+//       "entries": [
+//         { "tags": ["下载站", "bug"],     "content": "修复了一个问题\n- 细节" },
+//         { "tags": ["下载站", "新增"],   "content": "新增了一个功能" },
+//         { "tags": ["其他",   "安全"],   "content": "答题锁定加固" }
+//       ]
 //     }
 //   ]
 // }
-// logs[] 里每个元素 = 一天，pages 里按栏目填写，想填哪个填哪个。
-// download/pmth/signal 对应三个子页面；other 是「其他 / 站点级」更新，
-// 没有对应子页面，只在导航页 / 蓝奏云（scope=all）的全部视图里出现。
-// 导航页 / 蓝奏云显示全部非空分栏；其余各页只取自己那一栏，
-// 自己那栏没填则这一整天不出现；所有天都没内容显示「暂无信息」。
-// tags 里每栏可选一个小标签（新增 / 修复 / 优化 / bug 等），显示在正文前的小框框里。
-// 每栏正文用 \n 换行，一行 = 一个列表项；也可以直接写 HTML，会原样渲染。
-// 兼容：早期平铺格式（date/scope/content）与 contentByScope 分段格式仍可读取。
+// logs[] 每个元素 = 一天；entries[] 每条 = 一条独立更新，各自带 tags 数组。
+// tags 里「下载站 / 谱面工坊 / SIGNAL / 其他」是页面标签，决定出现在哪些页面；
+// 其余是类别标签（新增 / 修复 / 优化 / bug / 安全 ……），可以任意写、可以多个。
+// 既有 bug 修复又有别的内容就写两条、各打各的标签；同标签的多条会自动聚成一组。
+// 导航页 / 蓝奏云显示全部；各子页面只取带自己页面标签的条目；「其他」只在全部视图出现。
+// 自己那天没有条目则这一整天不出现；所有天都没内容显示「暂无信息」。
+// 兼容：早期 pages + tags 四栏格式与更早的平铺 scope / contentByScope 格式仍可读取。
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -146,21 +143,24 @@ function renderContent(content: unknown): string {
 
 interface RawLog {
     date?: string;
-    /** 新格式：一天里按页面分栏，没填的键就是空的 */
-    pages?: Record<string, string>;
-    /** 每栏可选的小标签，留空就不显示 */
-    tags?: Record<string, string>;
+    /** 新格式：一天里多条独立更新 */
+    entries?: { tags?: string[] | string; content?: string }[];
     /** 旧格式兼容字段 */
+    pages?: Record<string, string>;
+    tags?: Record<string, string>;
     content?: string;
     scope?: string[] | string;
     contentByScope?: Record<string, string>;
 }
 
-interface DaySection {
-    id: string;
-    name: string;
+interface LogEntry {
+    tags: string[];
     content: string;
-    tag: string;
+}
+
+interface EntryGroup {
+    tags: string[];
+    contents: string[];
 }
 
 const PAGES: { id: string; name: string }[] = [
@@ -169,48 +169,95 @@ const PAGES: { id: string; name: string }[] = [
     { id: 'signal', name: 'SIGNAL' },
     { id: 'other', name: '其他' },
 ];
+const LABEL_TO_PAGE: Record<string, string> = {
+    '下载站': 'download', '谱面工坊': 'pmth', 'SIGNAL': 'signal', '其他': 'other',
+    download: 'download', pmth: 'pmth', signal: 'signal', other: 'other',
+};
 
-/** 把「一天」拆成非空分栏；兼容旧格式时自动归并 */
-function sectionsOf(log: RawLog): DaySection[] {
-    const out: DaySection[] = [];
+function normTags(v: unknown): string[] {
+    const arr = Array.isArray(v) ? v
+        : (typeof v === 'string' && v.trim() ? v.split(/[,，、\s]+/) : []);
+    const out: string[] = [];
+    for (const x of arr) {
+        const s = String(x ?? '').trim();
+        if (s && out.indexOf(s) < 0) out.push(s);
+    }
+    return out;
+}
+/** 一条属于哪些页面；没写页面标签时按「其他」处理 */
+function pageIdsOf(tags: string[]): string[] {
+    const ids: string[] = [];
+    for (const t of tags) {
+        const id = LABEL_TO_PAGE[t];
+        if (id && ids.indexOf(id) < 0) ids.push(id);
+    }
+    return ids.length ? ids : ['other'];
+}
+function splitSections(text: string): string[] {
+    return String(text || '').split(/\n\s*\n/)
+        .map(x => x.trim()).filter(x => x.length > 0);
+}
+
+/** 把「一天」拆成条目；兼容旧格式时自动按空行拆段并补页面标签 */
+function entriesOf(log: RawLog): LogEntry[] {
+    const out: LogEntry[] = [];
+    if (Array.isArray(log.entries)) {
+        for (const e of log.entries) {
+            if (!e || typeof e !== 'object') continue;
+            const c = typeof e.content === 'string' ? e.content : '';
+            if (c.trim()) out.push({ tags: normTags(e.tags), content: c });
+        }
+        return out;
+    }
     if (log.pages && typeof log.pages === 'object' && !Array.isArray(log.pages)) {
         const tags = (log.tags && typeof log.tags === 'object' && !Array.isArray(log.tags))
-            ? log.tags : null;
+            ? log.tags : {};
         for (const p of PAGES) {
-            const c = log.pages[p.id];
-            if (typeof c === 'string' && c.trim()) {
-                const tag = tags && typeof tags[p.id] === 'string' ? tags[p.id].trim() : '';
-                out.push({ id: p.id, name: p.name, content: c, tag });
+            const v = log.pages[p.id];
+            if (typeof v !== 'string' || !v.trim()) continue;
+            for (const part of splitSections(v)) {
+                const ts = [p.name];
+                const extra = String(tags[p.id] ?? '').trim();
+                if (extra) ts.push(extra);
+                out.push({ tags: ts, content: part });
             }
         }
         return out;
     }
-
     const own = Array.isArray(log.scope)
-        ? log.scope.map(String)
-        : (log.scope ? [String(log.scope)] : ['download']);
+        ? log.scope.map(String) : (log.scope ? [String(log.scope)] : ['download']);
     const parts = log.contentByScope && typeof log.contentByScope === 'object'
         ? log.contentByScope : null;
     const anyPart = parts && PAGES.some(p => typeof parts[p.id] === 'string' && parts[p.id].trim());
-
     for (const p of PAGES) {
         if (own.indexOf(p.id) < 0) continue;
         const raw = anyPart
             ? ((typeof parts?.[p.id] === 'string' && parts[p.id].trim()) ? parts[p.id] : log.content)
             : log.content;
-        if (typeof raw === 'string' && raw.trim()) out.push({ id: p.id, name: p.name, content: raw, tag: '' });
+        if (typeof raw === 'string' && raw.trim()) {
+            for (const part of splitSections(raw)) out.push({ tags: [p.name], content: part });
+        }
     }
     if (!out.length && typeof log.content === 'string' && log.content.trim()) {
-        out.push({ id: 'download', name: '下载站', content: log.content, tag: '' });
+        for (const part of splitSections(log.content)) out.push({ tags: ['下载站'], content: part });
     }
     return out;
 }
 
-/**
- * 按当前页面筛出「天」。
- * - all：把该天所有非空分栏拼在一起，每段带页面名小标题
- * - 单页：只取自己那一栏；没填则这一整天跳过
- */
+/** 同标签组合的多条聚成一组，保持首次出现顺序 */
+function groupEntries(entries: LogEntry[]): EntryGroup[] {
+    const out: EntryGroup[] = [];
+    const map = new Map<string, EntryGroup>();
+    for (const e of entries) {
+        const key = e.tags.slice().sort().join('|');
+        let g = map.get(key);
+        if (!g) { g = { tags: e.tags.slice(), contents: [] }; map.set(key, g); out.push(g); }
+        g.contents.push(e.content);
+    }
+    return out;
+}
+
+/** 按当前页面筛出「天」，每个标签组合产出一条 UpdateLog */
 export function normalizeLogs(data: unknown, scope = 'all'): UpdateLog[] {
     let arr: unknown;
     if (Array.isArray(data)) arr = data;
@@ -222,25 +269,21 @@ export function normalizeLogs(data: unknown, scope = 'all'): UpdateLog[] {
     const out: UpdateLog[] = [];
     for (const log of arr as RawLog[]) {
         if (!log || typeof log !== 'object') continue;
-        const all = sectionsOf(log);
-        const visible = scope === 'all' ? all : all.filter(s => wanted.indexOf(s.id) >= 0);
-        if (!visible.length) continue;
-
-        let content: string;
-        let tag = '';
-        if (visible.length === 1) {
-            content = renderContent(visible[0].content);
-            tag = visible[0].tag;
-        } else {
-            content = visible.map(s =>
-                `<p class="font-semibold text-brand-cyan mt-3 first:mt-0">` +
-                (s.tag ? `<span class="inline-block mr-1.5 px-1.5 py-[1px] rounded-full text-[10px] align-middle border border-slate-500/40 bg-slate-400/10 text-slate-300">${escapeHtml(s.tag)}</span>` : '') +
-                `${escapeHtml(s.name)}</p>` +
-                renderContent(s.content)
-            ).join('');
+        const entries = entriesOf(log).filter(e => {
+            if (scope === 'all') return true;
+            const ids = pageIdsOf(e.tags);
+            return ids.some(id => wanted.indexOf(id) >= 0);
+        });
+        if (!entries.length) continue;
+        for (const g of groupEntries(entries)) {
+            const content = g.contents
+                .map((c, i) => (i > 0
+                    ? '<div class="mt-2 pt-2 border-t border-slate-700/40">' + renderContent(c) + '</div>'
+                    : renderContent(c)))
+                .join('');
+            if (!content) continue;
+            out.push({ date: log.date ? String(log.date) : '', content, tags: g.tags });
         }
-        if (!content) continue;
-        out.push({ date: log.date ? String(log.date) : '', content, tag });
     }
     return out;
 }
