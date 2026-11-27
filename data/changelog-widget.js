@@ -2,16 +2,13 @@
  * PTH 统一更新日志组件
  * ------------------------------------------------------------
  * 数据只有一份：/data/changelog.json
- * 统一结构：logs[] 每个元素 = 一天，字段 date + entries[]。
- *   entries[] 里每一条 = 一条独立更新：{ tags: [...], content: "..." }
- *   tags 是字符串数组，可以给一条打任意多个标签，标签分两类：
- *     · 页面标签：下载站 / 谱面工坊 / SIGNAL / 其他
- *       —— 决定这条出现在哪些页面；「其他」没有对应子页，只在全部视图出现；
- *          一条没写页面标签时按「其他」处理，不会混进下载站。
- *     · 类别标签：新增 / 修复 / 优化 / bug / 安全 / 文档 …… 可以自己写。
- *   同一天里 tags 相同的多条会自动聚在一个小框下面（一个标签底下写多条）；
- *   tags 不同的各自成块（一个标签写完换另一个标签接着写）。
- *   既有 bug 修复又有别的内容，就写两条、各打各的标签，不用硬塞进一段。
+ * 数据结构：logs[] 里每个元素 = 一天，字段 date + pages。
+ *   pages 里按页面分区：{ download, pmth, signal, other }
+ *   download/pmth/signal 对应三个子页面；other 是「其他 / 站点级」更新
+ *   （导航页改版、域名更替、目录调整等不属于某个子页面的内容）。
+ *   想填哪个就填哪个，没填的就是空的 —— 该页面这一天没有更新。
+ *   all 页面（导航页 / 蓝奏云）显示一天里所有非空分区并各自标注分区名；
+ *   其余页面只取自己那一区（other 没有对应子页，只在全部视图出现）。
  *
  * 引一行脚本的页面用 data-scope 决定显示哪些日志：
  *   all       全部（导航页与蓝奏云）
@@ -23,8 +20,8 @@
  * download 分类的更新日志（Download/src/utils/changelog.ts）。
  * 答题页同样不引。
  *
- * 兼容：早期「pages + tags 四栏」格式与更早的平铺 scope / contentByScope
- * 格式仍可读取，会自动按空行拆成多条条目，避免线上缓存旧 JSON 时显示异常。
+ * 兼容：早期平铺格式（date/scope/content）与 contentByScope 分段格式仍可读取，
+ * 会自动归并成「一天 + 分区」，避免线上还缓存着旧 JSON 时显示异常。
  *
  * data-variant:
  *   dock    右下角浮动按钮 + 居中弹窗（默认）
@@ -41,7 +38,7 @@
     var scope = (tag.getAttribute('data-scope') || 'all').toLowerCase();
     var variant = tag.getAttribute('data-variant') || 'dock';
     var accent = tag.getAttribute('data-accent') || '#22d3ee';
-    var WIDGET_VERSION = '2026.11.15-b';
+    var WIDGET_VERSION = '2026.11.15-c';
 
     // 优先用「脚本自己所在目录」推导 JSON 地址：无论站点挂在域名根还是
     // 子路径（例如还没绑自定义域名时的 /pth/），这个地址永远指向同一份数据。
@@ -92,99 +89,31 @@
         { id: 'signal',   name: 'SIGNAL' },
         { id: 'other',    name: '其他' }
     ];
-    var LABEL_TO_PAGE = {
-        '下载站': 'download', '谱面工坊': 'pmth', 'SIGNAL': 'signal', '其他': 'other',
-        download: 'download', pmth: 'pmth', signal: 'signal', other: 'other'
-    };
     var wanted = scope.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
-    /* 小标签按类别配低饱和色，尽量不抢正文 */
-    var KIND_CLASS = {
-        '修复': 'k-fix', 'bug': 'k-fix', '兼容': 'k-fix', '缺陷': 'k-fix',
-        '新增': 'k-add', '功能': 'k-add', '优化': 'k-add', '性能': 'k-add',
-        '界面': 'k-add', '数据': 'k-add', '补充': 'k-add',
-        '安全': 'k-sec'
-    };
-    function kindClass(tag) { return KIND_CLASS[tag] || ''; }
-    function kindHtml(tag) {
-        if (!tag || typeof tag !== 'string' || !tag.trim()) return '';
-        var v = tag.trim();
-        return '<span class="pth-cl-kind ' + kindClass(v) + '">' + esc(v) + '</span>';
-    }
-    /** 一条的 tags 归一成去重数组 */
-    function normTags(v) {
-        var arr = Array.isArray(v) ? v
-            : (typeof v === 'string' && v.trim() ? v.split(/[,，、\s]+/) : []);
-        var out = [];
-        arr.forEach(function (x) {
-            var s = String(x == null ? '' : x).trim();
-            if (s && out.indexOf(s) < 0) out.push(s);
-        });
-        return out;
-    }
-    /** 这条属于哪些页面；没写页面标签就当「其他」，不混进子页面 */
-    function pageIdsOf(tags) {
-        var ids = [];
-        tags.forEach(function (t) {
-            var id = LABEL_TO_PAGE[t];
-            if (id && ids.indexOf(id) < 0) ids.push(id);
-        });
-        return ids.length ? ids : ['other'];
-    }
-    /** 旧格式一整栏按空行拆成多条 */
-    function splitSections(text) {
-        return String(text || '').split(/\n\s*\n/)
-            .map(function (x) { return x.trim(); })
-            .filter(function (x) { return x.length > 0; });
-    }
-    /** 一组标签渲染成小框：页面标签用主色，类别标签按类别配色 */
-    function tagBoxes(tags) {
-        return tags.map(function (t) {
-            var pid = LABEL_TO_PAGE[t];
-            if (pid) {
-                return '<span class="pth-cl-tag' + (pid === 'other' ? ' is-other' : '') +
-                    '">' + esc(t) + '</span>';
-            }
-            return kindHtml(t);
-        }).join('');
-    }
-
-    /** 把「一天」归一成 { date, entries: [{ tags, content }] }；兼容旧格式 */
+    /**
+     * 把「一天」归一成 { date, sections: [{ id, name, content }] }。
+     * 新格式看 pages；没填的键（缺失或空串）就是空的，不生成 section。
+     * 旧格式（平铺 content+scope / contentByScope）也能读，自动归并进分栏。
+     */
     function normalizeDay(log) {
         if (!log || typeof log !== 'object') return null;
         var date = log.date ? String(log.date) : '';
-        var entries = [];
+        var sections = [];
 
-        if (Array.isArray(log.entries)) {
-            log.entries.forEach(function (e) {
-                if (!e || typeof e !== 'object') return;
-                var c = (typeof e.content === 'string') ? e.content : '';
-                if (!c.trim()) return;
-                entries.push({ tags: normTags(e.tags), content: c });
-            });
-            return { date: date, entries: entries };
-        }
-
-        // 兼容「pages + tags 四栏」：每栏按空行拆成多条
         var pages = (log.pages && typeof log.pages === 'object' && !Array.isArray(log.pages))
             ? log.pages : null;
         if (pages) {
-            var tg = (log.tags && typeof log.tags === 'object' && !Array.isArray(log.tags))
-                ? log.tags : {};
             PAGES.forEach(function (p) {
-                var v = pages[p.id];
-                if (typeof v !== 'string' || !v.trim()) return;
-                splitSections(v).forEach(function (part) {
-                    var tags = [p.name];
-                    var t = String(tg[p.id] == null ? '' : tg[p.id]).trim();
-                    if (t) tags.push(t);
-                    entries.push({ tags: tags, content: part });
-                });
+                var c = pages[p.id];
+                if (typeof c === 'string' && c.trim()) {
+                    sections.push({ id: p.id, name: p.name, content: c });
+                }
             });
-            return { date: date, entries: entries };
+            return { date: date, sections: sections };
         }
 
-        // 兼容更早的平铺 scope / contentByScope 格式
+        // —— 兼容旧格式 ——
         var own = Array.isArray(log.scope) ? log.scope
             : (log.scope ? [log.scope] : ['download']);
         var parts = (log.contentByScope && typeof log.contentByScope === 'object')
@@ -194,47 +123,36 @@
         });
         PAGES.forEach(function (p) {
             if (own.indexOf(p.id) < 0) return;
-            var c = anyPart
-                ? ((typeof parts[p.id] === 'string' && parts[p.id].trim()) ? parts[p.id] : log.content)
-                : log.content;
+            var c;
+            if (anyPart) {
+                c = (typeof parts[p.id] === 'string' && parts[p.id].trim())
+                    ? parts[p.id] : log.content;
+            } else {
+                c = log.content;
+            }
             if (typeof c === 'string' && c.trim()) {
-                splitSections(c).forEach(function (part) {
-                    entries.push({ tags: [p.name], content: part });
-                });
+                sections.push({ id: p.id, name: p.name, content: c });
             }
         });
-        if (!entries.length && typeof log.content === 'string' && log.content.trim()) {
-            splitSections(log.content).forEach(function (part) {
-                entries.push({ tags: ['下载站'], content: part });
-            });
+        // 旧格式若完全没写 scope，兜底归到 download
+        if (!sections.length && typeof log.content === 'string' && log.content.trim()) {
+            sections.push({ id: 'download', name: '下载站', content: log.content });
         }
-        return { date: date, entries: entries };
+        return { date: date, sections: sections };
     }
 
-    /** 本页可见的「天」；同标签组合的多条聚成一组 */
+    /** 本页可见的「天」；自己那栏没填 → 这一整天不出现 */
     function visibleDays(data) {
         if (!data || !Array.isArray(data.logs)) return [];
         var out = [];
         data.logs.forEach(function (log) {
             var day = normalizeDay(log);
             if (!day) return;
-            var es = day.entries.filter(function (e) {
-                if (scope === 'all') return true;
-                var ids = pageIdsOf(e.tags);
-                return ids.some(function (id) { return wanted.indexOf(id) >= 0; });
-            });
-            if (!es.length) return;
-            var groups = [], map = {};
-            es.forEach(function (e) {
-                var key = e.tags.slice().sort().join('|');
-                var g = map[key];
-                if (!g) {
-                    g = { tags: e.tags.slice(), contents: [] };
-                    map[key] = g; groups.push(g);
-                }
-                g.contents.push(e.content);
-            });
-            out.push({ date: day.date, groups: groups });
+            var sections = (scope === 'all')
+                ? day.sections
+                : day.sections.filter(function (s) { return wanted.indexOf(s.id) >= 0; });
+            if (!sections.length) return;
+            out.push({ date: day.date, sections: sections });
         });
         return out;
     }
@@ -253,18 +171,16 @@
             html += '<section class="pth-cl-group' + (gi === 0 ? ' is-latest' : '') + '">' +
                 '<div class="pth-cl-date"><span class="pth-cl-dot"></span>' + esc(day.date) +
                 (gi === 0 ? '<span class="pth-cl-latest">最新</span>' : '') +
-                (day.groups.length > 1
-                    ? '<span class="pth-cl-count">' + day.groups.length + ' 组</span>' : '') +
+                (day.sections.length > 1
+                    ? '<span class="pth-cl-count">' + day.sections.length + ' 个页面</span>' : '') +
                 '</div>';
-            day.groups.forEach(function (g) {
+            day.sections.forEach(function (s) {
                 html += '<article class="pth-cl-entry">' +
-                    '<div class="pth-cl-tags">' + tagBoxes(g.tags) + '</div>' +
-                    '<div class="pth-cl-body">' +
-                    g.contents.map(function (c, ci) {
-                        return '<div class="pth-cl-item' + (ci > 0 ? ' is-more' : '') + '">' +
-                            bodyHtml(c) + '</div>';
-                    }).join('') +
-                    '</div></article>';
+                    '<div class="pth-cl-tags">' +
+                    '<span class="pth-cl-tag' +
+                    (s.id === 'other' ? ' is-other' : '') + '">' + esc(s.name) + '</span></div>' +
+                    '<div class="pth-cl-body">' + bodyHtml(s.content) + '</div>' +
+                    '</article>';
             });
             html += '</section>';
         });
@@ -336,14 +252,7 @@
         '.pth-cl-entry{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);',
         'border-radius:9px;padding:10px 12px;margin-bottom:8px;}',
         '.pth-cl-entry:last-child{margin-bottom:0;}',
-        '.pth-cl-item + .pth-cl-item{margin-top:9px;padding-top:9px;',
-        'border-top:1px dashed rgba(255,255,255,.09);}',
         '.pth-cl-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;align-items:center;}',
-        '.pth-cl-kind{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;line-height:1.5;',
-        'color:#94a3b8;background:rgba(148,163,184,.09);border:1px solid rgba(148,163,184,.22);}',
-        '.pth-cl-kind.k-fix{color:#fbbf24;background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.24);}',
-        '.pth-cl-kind.k-add{color:#67e8f9;background:rgba(34,211,238,.07);border-color:rgba(34,211,238,.20);}',
-        '.pth-cl-kind.k-sec{color:#fca5a5;background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.22);}',
         '.pth-cl-tag{font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px;line-height:1.5;',
         'color:var(--pth-cl-accent);background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.28);}',
         '.pth-cl-tag.is-all{color:#fbbf24;background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.30);}',
@@ -487,7 +396,7 @@
                 // 继续换下一个源，而不是静默显示「暂无信息」。
                 var recognized = data.logs.some(function (l) {
                     return l && typeof l === 'object' &&
-                        (l.pages || l.entries || typeof l.content === 'string' || l.contentByScope || l.tags);
+                        (l.pages || typeof l.content === 'string' || l.contentByScope);
                 });
                 if (data.logs.length && !recognized) throw new Error('日志结构不认识');
                 console.info('[changelog] 命中数据源 ' + (i + 1) + '：' + base);

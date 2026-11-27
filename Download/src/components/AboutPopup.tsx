@@ -15,28 +15,6 @@ interface AccordionItemProps {
     isLast: boolean;
 }
 
-/* 正文前的小标签：低饱和配色，尽量不抢正文（与原生页面 widget 一致） */
-const TAG_FIX = new Set(['修复', 'bug', '兼容', '缺陷']);
-const TAG_ADD = new Set(['新增', '功能', '优化', '性能', '界面', '数据', '补充']);
-const TAG_SEC = new Set(['安全']);
-
-const LogTag: React.FC<{ tag?: string }> = ({ tag }) => {
-    if (!tag || !tag.trim()) return null;
-    const v = tag.trim();
-    const tone = TAG_FIX.has(v)
-        ? 'text-amber-300/90 bg-amber-400/[.08] border-amber-400/25'
-        : TAG_ADD.has(v)
-            ? 'text-cyan-300/90 bg-cyan-400/[.07] border-cyan-400/20'
-            : TAG_SEC.has(v)
-                ? 'text-red-300/90 bg-red-400/[.08] border-red-400/25'
-                : 'text-slate-400 bg-slate-400/[.08] border-slate-400/25';
-    return (
-        <span className={`inline-flex items-center px-[7px] py-[1px] rounded-full text-[10px] font-bold leading-[1.5] border ${tone}`}>
-            {v}
-        </span>
-    );
-};
-
 const AccordionItem: React.FC<AccordionItemProps> = ({ title, children, isLast }) => (
     <details className={`group border-b border-slate-700/50 py-4 ${isLast ? 'border-none' : ''}`}>
         <summary className="flex cursor-pointer list-none items-center justify-between font-semibold text-slate-200 hover:text-white transition-colors">
@@ -171,15 +149,7 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
                                             key={i}
                                             className="bg-slate-800/50 rounded-lg p-4 text-slate-300 text-sm border border-slate-700/50"
                                         >
-                                            {(() => {
-                                                const ts = log.tags?.length ? log.tags : (log.tag ? [log.tag] : []);
-                                                return ts.length ? (
-                                                    <div className="mb-2 flex flex-wrap gap-1">
-                                                        {ts.map((tg, ti) => <LogTag key={ti} tag={tg} />)}
-                                                    </div>
-                                                ) : null;
-                                            })()}
-                                            <div dangerouslySetInnerHTML={{ __html: log.content }} />
+                                                                                        <div dangerouslySetInnerHTML={{ __html: log.content }} />
                                         </div>
                                     ))}
                                 </div>
@@ -203,15 +173,7 @@ export const AboutPopup: React.FC<AboutPopupProps> = ({ isOpen, onClose }) => {
                                         <div className="space-y-3">
                                             {group.items.map((log, i) => (
                                                 <div key={i} className={i > 0 ? 'pt-3 border-t border-slate-700/50' : ''}>
-                                                    {(() => {
-                                                const ts = log.tags?.length ? log.tags : (log.tag ? [log.tag] : []);
-                                                return ts.length ? (
-                                                    <div className="mb-2 flex flex-wrap gap-1">
-                                                        {ts.map((tg, ti) => <LogTag key={ti} tag={tg} />)}
-                                                    </div>
-                                                ) : null;
-                                            })()}
-                                                    <div dangerouslySetInnerHTML={{ __html: log.content }} />
+                                                                                                        <div dangerouslySetInnerHTML={{ __html: log.content }} />
                                                 </div>
                                             ))}
                                         </div>
