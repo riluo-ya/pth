@@ -25,16 +25,17 @@ interface SongWorkspaceProps {
     exportState: ExportState;
     onExportChart: () => void;
     onExportAllAssets: () => void;
-    /** 把这首歌的全部难度各打一个包；不传则不显示该按钮 */
-    onExportAllDifficulties?: () => void;
     /** 传入后才显示「生成分享卡片」入口 */
     onShareCardClick?: () => void;
-    onDownloaded: (fileName: string) => void;
+    /** PTH 的 FileTable 内部自己加载文件，加载完成后回调这里 */
+    onFilesFound: (files: FileInfo[]) => void;
 }
 
 // How far (px) the file list has to scroll before the illustration is fully dimmed.
 const DIM_DISTANCE = 320;
 const MAX_DIM = 0.82;
+// Max distance (px) the illustration drifts from centre while following the pointer. Must stay below the -inset-6 bleed.
+const PARALLAX_SHIFT = 14;
 
 const ProgressBar: React.FC<{ progress: number; className: string }> = ({ progress, className }) => (
     <div className={`absolute bottom-0 left-0 h-[3px] transition-[width] duration-150 ${className}`} style={{ width: `${progress.toFixed(0)}%` }} />
@@ -53,18 +54,54 @@ export const SongWorkspace: React.FC<SongWorkspaceProps> = ({
     exportState,
     onExportChart,
     onExportAllAssets,
-    onExportAllDifficulties,
     onShareCardClick,
-    onDownloaded,
+    onFilesFound,
 }) => {
     const { settings } = useSettings();
     const [scrollTop, setScrollTop] = useState(0);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const parallaxRef = useRef<HTMLDivElement>(null);
+    const parallaxEnabled = settings.newUiBackgroundParallax;
 
     // Jump back to the workspace when switching songs.
     useEffect(() => {
         scrollRef.current?.scrollTo({ top: 0 });
     }, [song?.id]);
+
+    // 曲绘随鼠标轻微漂移。仅鼠标/触控板，遵循「减少动态效果」偏好。
+    useEffect(() => {
+        const el = parallaxRef.current;
+        if (!el) return;
+        el.style.transform = '';
+        if (!parallaxEnabled) return;
+        const mql = window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+        if (!mql.matches) return;
+
+        let targetX = 0, targetY = 0, x = 0, y = 0, frame = 0;
+        const tick = () => {
+            x += (targetX - x) * 0.08;
+            y += (targetY - y) * 0.08;
+            el.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+            frame = Math.abs(targetX - x) > 0.05 || Math.abs(targetY - y) > 0.05 ? requestAnimationFrame(tick) : 0;
+        };
+        const handleMove = (e: PointerEvent) => {
+            if (e.pointerType !== 'mouse') return;
+            targetX = (e.clientX / window.innerWidth - 0.5) * -2 * PARALLAX_SHIFT;
+            targetY = (e.clientY / window.innerHeight - 0.5) * -2 * PARALLAX_SHIFT;
+            if (!frame) frame = requestAnimationFrame(tick);
+        };
+        const handleLeave = () => {
+            targetX = targetY = 0;
+            if (!frame) frame = requestAnimationFrame(tick);
+        };
+        window.addEventListener('pointermove', handleMove);
+        document.documentElement.addEventListener('pointerleave', handleLeave);
+        return () => {
+            window.removeEventListener('pointermove', handleMove);
+            document.documentElement.removeEventListener('pointerleave', handleLeave);
+            cancelAnimationFrame(frame);
+        };
+    }, [parallaxEnabled]);
 
     const scrollToFiles = () => {
         const el = scrollRef.current;
@@ -76,17 +113,18 @@ export const SongWorkspace: React.FC<SongWorkspaceProps> = ({
 
     return (
         <div className="relative h-full min-h-0 overflow-hidden">
-            {/* Illustration layer */}
+            {/* Illustration layer — 清晰大图，随鼠标轻微漂移（与上游一致） */}
             <div className="absolute inset-0 bg-[repeating-linear-gradient(135deg,#141b29_0_10px,#0f1521_10px_20px)]" />
-            <div
-                className="absolute inset-0 bg-cover bg-center transition-[opacity,transform] duration-700 ease-out"
-                style={{
-                    backgroundImage: bgImage ? `url("${bgImage}")` : 'none',
-                    opacity: isBgLoaded ? 1 : 0,
-                    transform: isBgLoaded ? 'scale(1)' : 'scale(1.04)',
-                }}
-                aria-hidden="true"
-            />
+            <div ref={parallaxRef} className="absolute -inset-6 will-change-transform" aria-hidden="true">
+                <div
+                    className="absolute inset-0 bg-cover bg-center transition-[opacity,transform] duration-700 ease-out"
+                    style={{
+                        backgroundImage: bgImage ? `url("${bgImage}")` : 'none',
+                        opacity: isBgLoaded ? 1 : 0,
+                        transform: isBgLoaded ? 'scale(1)' : 'scale(1.04)',
+                    }}
+                />
+            </div>
             <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(to_bottom,rgba(9,11,16,0)_15%,rgba(9,11,16,.7)_50%,#090b10_82%)]" />
             <div className="absolute inset-0 pointer-events-none bg-[#090b10]" style={{ opacity: dim }} />
 
@@ -132,7 +170,6 @@ export const SongWorkspace: React.FC<SongWorkspaceProps> = ({
                                     selectedDifficulty={selectedDifficulty}
                                     onSelectDifficulty={onSelectDifficulty}
                                     selectedSong={song}
-                                    files={files}
                                 />
                             ) : (
                                 <p className="text-sm text-slate-500">没有找到这首曲子的谱面。</p>
@@ -168,17 +205,6 @@ export const SongWorkspace: React.FC<SongWorkspaceProps> = ({
                                     {exportState.type === 'phira' ? <><Spinner />正在压缩…</> : '全部资源 .zip'}
                                     {exportState.type === 'phira' && <ProgressBar progress={exportState.progress} className="bg-[#22d3ee]/75" />}
                                 </button>
-                                {onExportAllDifficulties && difficulties.length > 1 && (
-                                    <button
-                                        type="button"
-                                        onClick={onExportAllDifficulties}
-                                        disabled={isExporting || difficulties.length === 0}
-                                        title="每个难度各打一个谱面包，再统一打包成一个 .zip"
-                                        className="relative overflow-hidden h-[52px] px-4 rounded-[10px] border border-white/[.12] text-slate-200 flex items-center justify-center gap-2 font-semibold text-sm backdrop-blur-sm hover:bg-white/[.04] transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                                    >
-                                        全部难度
-                                    </button>
-                                )}
                             </div>
 
                             {onShareCardClick && (
@@ -206,7 +232,7 @@ export const SongWorkspace: React.FC<SongWorkspaceProps> = ({
                         </div>
 
                         <div className="px-5 sm:px-10 pt-1 pb-10">
-                            <FileTable selectedSong={song} files={files} isLoading={isLoadingFiles} onDownloaded={onDownloaded} />
+                            <FileTable selectedSong={song} onFilesFound={onFilesFound} />
                         </div>
                     </>
                 )}

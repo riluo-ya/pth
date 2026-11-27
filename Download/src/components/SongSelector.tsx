@@ -7,6 +7,7 @@ import { getSongEffect } from '../song-effects';
 import { Song, SortConfig, SortType, SortDirection } from '../types';
 import { ErrorIcon, MagnifyingGlassIcon, ArrowsUpDownIcon, CheckIcon, XMarkIcon } from './Icons';
 import { useSongFilter } from '../hooks/useSongFilter';
+import { ghRaw } from '../utils/sources';
 
 interface SongSelectorProps {
   isLoading: boolean;
@@ -17,6 +18,28 @@ interface SongSelectorProps {
   sortConfig: SortConfig;
   onSortConfigChange: (config: SortConfig) => void;
 }
+
+/** 选曲列表里的曲绘缩略图（与上游一致） */
+const SongThumbnail: React.FC<{ src: string }> = ({ src }) => {
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
+    return (
+        <div className="relative w-11 h-[26px] flex-none rounded overflow-hidden bg-[repeating-linear-gradient(135deg,#1e293b_0_4px,#172033_4px_8px)]">
+            {!failed && (
+                <img
+                    src={src}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setFailed(true)}
+                    className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                />
+            )}
+        </div>
+    );
+};
 
 export const SongSelector: React.FC<SongSelectorProps> = ({ isLoading, error, songs, selectedSong, onSongSelect, sortConfig, onSortConfigChange }) => {
     const { settings } = useSettings();
@@ -314,6 +337,7 @@ export const SongSelector: React.FC<SongSelectorProps> = ({ isLoading, error, so
                                                 role="option"
                                                 aria-selected={selectedSong?.id === song.id}
                                             >
+                                                <SongThumbnail src={ghRaw(`7aGiven/Phigros_Resource/refs/heads/illustrationBlur/${song.id}.png`)} />
                                                 <span className="flex-1 min-w-0 flex flex-col">
                                                     <span className={`text-sm leading-[1.2] truncate ${selectedSong?.id === song.id ? 'text-white' : 'text-slate-300'}`}>
                                                         {song.name}

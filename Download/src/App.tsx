@@ -9,9 +9,7 @@ import { useIsMobile } from './hooks/useIsMobile';
 import { useSongFilter } from './hooks/useSongFilter';
 import { MobileLayout } from './components/mobile/MobileLayout';
 import { SongSelector } from './components/SongSelector';
-import { FileTable } from './components/FileTable';
-import { DifficultySelector } from './components/DifficultySelector';
-import { Spinner } from './components/Spinner';
+import { SongWorkspace } from './components/SongWorkspace';
 import { BlacklistWarningPopup } from './components/BlacklistWarningPopup';
 import { isBlacklisted, BlacklistEntry } from './blacklist';
 import { SettingsPopup } from './components/SettingsPopup';
@@ -23,7 +21,6 @@ import { useSettings } from './contexts/SettingsContext';
 import { AudioVisualizer } from './components/AudioVisualizer';
 import { getSongEffect } from './song-effects';
 import { SongEffectRenderer } from './components/SongEffectRenderer';
-import { AudioPlayerControl } from './components/AudioPlayerControl';
 import { Song, FileInfo, SortConfig } from './types';
 import { fetchVersion, fetchSongs, sendPatchedChartDownloadNotification } from './utils/api';
 import { ghRaw } from './utils/sources';
@@ -74,7 +71,6 @@ const App: React.FC = () => {
     const [showInstruction, setShowInstruction] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
     const toastTimeoutRef = useRef<number | null>(null);
-    const bgRef = useRef<HTMLDivElement>(null);
     const { reportResourceError } = useResourceError();
 
     const initialSongSelected = useRef<boolean>(false);
@@ -100,25 +96,8 @@ const App: React.FC = () => {
         document.documentElement.dataset.blur = settings.newUiBlur ? 'on' : 'off';
     }, [settings.newUiBlur]);
 
-    // 「背景跟随鼠标」：直接改 DOM 样式，避免每次 mousemove 都触发 React 重渲染
-    useEffect(() => {
-        const el = bgRef.current;
-        if (!el) return;
-        if (!settings.newUiBackgroundParallax || !settings.useNewUi) {
-            el.style.translate = '';
-            return;
-        }
-        const onMove = (e: MouseEvent) => {
-            const x = (e.clientX / window.innerWidth - 0.5) * 14;
-            const y = (e.clientY / window.innerHeight - 0.5) * 14;
-            el.style.translate = `${x.toFixed(1)}px ${y.toFixed(1)}px`;
-        };
-        window.addEventListener('mousemove', onMove);
-        return () => {
-            window.removeEventListener('mousemove', onMove);
-            el.style.translate = '';
-        };
-    }, [settings.newUiBackgroundParallax, settings.useNewUi]);
+    // 「背景跟随鼠标」已迁移到 SongWorkspace 内部（清晰大图层），由它读取
+    // settings.newUiBackgroundParallax 开关并用 requestAnimationFrame 平滑跟随。
 
     // 与上游一致：在控制台注册别名导出助手，方便整理 song-aliases.ts
     useEffect(() => {
@@ -465,35 +444,9 @@ const App: React.FC = () => {
         setBlacklistWarning(null);
     };
 
-    const isExporting = exportState.type !== null;
-
     return (
         <div className="relative h-app-shell flex flex-col antialiased font-saira text-slate-200 bg-[#090b10] overflow-hidden">
-            {/* New UI Background Layer - Fixed Z-0 */}
-            <div 
-                className="fixed top-0 left-0 w-full h-[100lvh] z-0 pointer-events-none"
-                aria-hidden="true"
-            >
-                {/* Background Image */}
-                <div
-                    ref={bgRef}
-                    className="absolute inset-0"
-                    style={{
-                        backgroundImage: bgImage ? `url("${bgImage}")` : 'none',
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        filter: 'blur(30px) brightness(0.5)',
-                        opacity: isBgLoaded ? 1 : 0,
-                        transform: isBgLoaded ? 'scale(1.05)' : 'scale(1.15)',
-                        // 背景淡入仍用 1 秒，但 translate 必须单独走短过渡：
-                        // 之前用 transition-all 会把 mousemove 写入的位移也纳入 1 秒缓动，
-                        // 鼠标移动时背景始终追不上目标值，看起来就是「跟随失效」。
-                        transition: 'opacity 1000ms ease-in-out, transform 1000ms ease-in-out, filter 1000ms ease-in-out, translate 120ms ease-out',
-                    }}
-                />
-                {/* Fallback/Base gradient used when image is not loaded or for slight darkening */}
-                <div className={`absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-900 to-gray-900 -z-10`} />
-            </div>
+            {/* 底层兜底渐变：清晰曲绘大图现在由 SongWorkspace 内部渲染（与上游一致） */}
 
             {/* Visualizer Layer - Fixed Z-5 (Between bg and content) */}
             {settings.useNewUi && settings.newUiShowVisualizer && activeAudio && !settings.bulkDownloadMode && (
@@ -636,7 +589,7 @@ const App: React.FC = () => {
                                 />
                         </aside>
 
-                        <section className="relative min-h-0 overflow-y-auto custom-scrollbar">
+                        <section className="relative min-h-0">
                             {/* 批量下载模式：把面板铺满右侧工作区 */}
                             {settings.bulkDownloadMode ? (
                                 <BulkDownloadPanel
@@ -646,130 +599,22 @@ const App: React.FC = () => {
                                     onExit={() => setSettings(prev => ({ ...prev, bulkDownloadMode: false }))}
                                 />
                             ) : (
-                                <div className="min-h-full flex flex-col gap-6 px-5 sm:px-8 py-6">
-                                {/* 曲目标题区：对齐上游的大字号排版 */}
-                                <div className="flex flex-col gap-1">
-                                    {selectedSong ? (
-                                        <>
-                                            <span className="font-mono text-[11px] font-medium tracking-[.12em] text-[#22d3ee] break-all select-all" title="歌曲 ID">
-                                                {selectedSong.id}
-                                            </span>
-                                            <h2 className="text-[32px] sm:text-[44px] font-bold leading-[1.15] tracking-[-0.01em] text-white break-words">
-                                                {selectedSong.name}
-                                            </h2>
-                                            <span className="text-base text-slate-400">{selectedSong.composer}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className="font-mono text-[11px] font-medium tracking-[.12em] text-[#22d3ee]">
-                                                未选择歌曲
-                                            </span>
-                                            <h2 className="text-[32px] sm:text-[44px] font-bold leading-[1.15] tracking-[-0.01em] text-white">
-                                                选一首歌
-                                            </h2>
-                                            <span className="text-base text-slate-400">
-                                                从左侧列表挑一首，查看它的谱面与文件。
-                                            </span>
-                                        </>
-                                    )}
-                                </div>
-
-                                {/* Audio Player - 位于工作区顶部 */}
-                                {settings.useNewUi && settings.newUiAudioPreview && (
-                                    <div className="flex flex-col items-center justify-center z-20 w-full max-w-lg">
-                                        {activeAudio ? (
-                                            <AudioPlayerControl 
-                                                audio={activeAudio} 
-                                                songName={selectedSong?.name}
-                                                artist={selectedSong?.composer}
-                                            />
-                                        ) : (
-                                            <div className="px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700/50 text-slate-500 text-sm italic backdrop-blur-sm">
-                                                选择歌曲以播放其音频。
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                    <div className="relative z-30 w-full max-w-4xl mx-auto">
-                                    <FileTable selectedSong={selectedSong} onFilesFound={handleFilesFound} />
-                                    {selectedSong && availableDifficulties.length > 0 && (
-                                        <div className="relative mt-6 flex flex-col gap-4">
-                                                <DifficultySelector
-                                                    difficulties={availableDifficulties}
-                                                    selectedDifficulty={selectedDifficulty}
-                                                    onSelectDifficulty={setSelectedDifficulty}
-                                                    selectedSong={selectedSong}
-                                                    highlight={false}
-                                                />
-                                            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleExportChart}
-                                                    disabled={isExporting}
-                                                    aria-live="polite"
-                                                    className={`export-glow relative overflow-hidden w-full sm:w-auto sm:min-w-[220px] h-[52px] rounded-[10px] bg-[#22d3ee] hover:bg-[#67e8f9] text-[#06141a] flex items-center justify-center gap-2.5 font-bold text-[15px] tracking-[.04em] transition-colors disabled:cursor-not-allowed disabled:bg-[#22d3ee]/40`}
-                                                >
-                                                    {exportState.type === 'chart' ? (
-                                                        <>
-                                                            <Spinner />
-                                                            <span>导出中...</span>
-                                                        </>
-                                                    ) : selectedDifficulty ? (
-                                                        `导出为谱面（${selectedDifficulty}）`
-                                                    ) : (
-                                                        '导出全部难度'
-                                                    )}
-                                                    {exportState.type === 'chart' && (
-                                                        <div
-                                                            className="absolute bottom-0 left-0 h-[3px] bg-[#06141a]/40 transition-[width] duration-150"
-                                                            style={{ width: `${exportState.progress.toFixed(0)}%` }}
-                                                        />
-                                                    )}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={handleExportAllAssets}
-                                                    disabled={!selectedSong || isExporting || files.length === 0}
-                                                    aria-live="polite"
-                                                    className="relative overflow-hidden w-full sm:w-auto h-[52px] px-5 rounded-[10px] border border-white/[.12] text-slate-200 flex items-center justify-center gap-2.5 font-semibold text-sm backdrop-blur-sm hover:bg-white/[.04] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    {exportState.type === 'phira' ? (
-                                                        <>
-                                                            <Spinner />
-                                                            <span>导出中...</span>
-                                                        </>
-                                                    ) : exportState.type === 'chart' ? (
-                                                        // 另一个导出在跑，说明为什么这个点不了
-                                                        '等待中'
-                                                    ) : (
-                                                        '导出全部资源'
-                                                    )}
-                                                    {exportState.type === 'phira' && (
-                                                        <div
-                                                            className="absolute bottom-0 left-0 h-[3px] bg-[rgba(34,211,238,.6)] transition-[width] duration-150"
-                                                            style={{ width: `${exportState.progress.toFixed(0)}%` }}
-                                                        />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* 谱面分享卡片入口：选中歌曲后即可生成（可在设置里关闭） */}
-                                    {selectedSong && settings.shareCardEnabled && (
-                                        <div className="mt-5 flex justify-center">
-                                            <button
-                                                type="button"
-                                                onClick={() => setIsShareCardOpen(true)}
-                                                className="px-5 py-2.5 font-bold rounded-lg shadow-md transition-colors duration-200 flex items-center justify-center bg-cyan-700 hover:bg-cyan-800 text-white"
-                                            >
-                                                生成分享卡片
-                                            </button>
-                                        </div>
-                                    )}
-                                    </div>
-                                </div>
+                                <SongWorkspace
+                                    song={selectedSong}
+                                    bgImage={bgImage}
+                                    isBgLoaded={isBgLoaded}
+                                    audio={activeAudio}
+                                    files={files}
+                                    isLoadingFiles={!!selectedSong && availableDifficulties.length === 0}
+                                    difficulties={availableDifficulties}
+                                    selectedDifficulty={selectedDifficulty}
+                                    onSelectDifficulty={setSelectedDifficulty}
+                                    exportState={exportState}
+                                    onExportChart={handleExportChart}
+                                    onExportAllAssets={handleExportAllAssets}
+                                    onShareCardClick={selectedSong && settings.shareCardEnabled ? () => setIsShareCardOpen(true) : undefined}
+                                    onFilesFound={handleFilesFound}
+                                />
                             )}
                         </section>
                     </main>
