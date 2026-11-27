@@ -302,7 +302,7 @@ chartUpdated: null`;
     }
 
     const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const fileExtension = settings.useZipFormat ? 'zip' : 'pez';
+    const fileExtension = chartExt(settings);
     const safeSongName = selectedSong.name.replace(/\s/g, '_').replace(/[<>:"/\\|?*]/g, '');
     const fileName = `${safeSongName}_${selectedDifficulty}.${fileExtension}`;
 
@@ -416,7 +416,7 @@ const handleExportBulkAssets = async (
             const res = await resourceFetch(url, { referrerPolicy: 'no-referrer' });
             if (res.ok) return await res.blob();
             failedFiles.push({ songId: song.id, songName: song.name, fileType: label, url });
-        } catch (e) {
+        } catch {
             failedFiles.push({ songId: song.id, songName: song.name, fileType: label, url });
         }
         return null;

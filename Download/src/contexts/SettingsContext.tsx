@@ -42,6 +42,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     );
 };
 
+// Provider 与配套 hook 同文件是 React Context 的常见写法，fast-refresh 规则在此不适用。
+// eslint-disable-next-line react-refresh/only-export-components
 export const useSettings = (): SettingsContextType => {
     const context = useContext(SettingsContext);
     if (!context) {

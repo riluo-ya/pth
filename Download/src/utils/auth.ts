@@ -35,7 +35,7 @@ export function verifyToken(): TokenValidationResult {
     try {
         const payloadStr = atob(token);
         parts = payloadStr.split('|');
-    } catch (e) {
+    } catch {
         return { valid: false, reason: '凭证格式损坏' };
     }
 
@@ -88,7 +88,7 @@ function buildReturnTarget(): string | null {
         const isDownloader = file === '' || file === 'index.html';
         if (isDownloader && !url.searchParams.get('song')) return null;
         return url.href;
-    } catch (e) {
+    } catch {
         return null;
     }
 }
@@ -110,7 +110,7 @@ export function redirectToQuiz(): void {
         window.location.href = back
             ? `/quiz/?return_to=${encodeURIComponent(back)}`
             : '/quiz/';
-    } catch (e) {
+    } catch {
         window.location.href = '/quiz/';
     }
 }

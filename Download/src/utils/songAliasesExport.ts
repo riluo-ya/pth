@@ -25,7 +25,7 @@ export const generateSongAliasesFile = (songs: Song[]): string => {
  * Logs the generated file and returns it as a string.
  */
 export const registerSongAliasesConsoleHelper = (songs: Song[]) => {
-  (window as any).generateSongAliases = () => {
+  (window as Window & { generateSongAliases?: () => string }).generateSongAliases = () => {
     const output = generateSongAliasesFile(songs);
     const added = songs.filter(s => !(s.name in songNameAliases)).map(s => s.name);
     console.log(`song-aliases.ts: ${Object.keys(songNameAliases).length} existing entries, ${added.length} new song(s) added${added.length ? ': ' + added.join(', ') : ''}`);

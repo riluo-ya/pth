@@ -126,7 +126,7 @@ const App: React.FC = () => {
     }, [songs]);
 
     const sortedSongs = React.useMemo(() => {
-        let result = [...songs];
+        const result = [...songs];
         
         if (sortConfig.type === 'alphanumerical') {
             result.sort((a, b) => a.name.localeCompare(b.name));
@@ -269,6 +269,9 @@ const App: React.FC = () => {
         return () => {
             // No cleanup needed for activeAudio here as setActiveAudio logic handles pause
         };
+        // 刻意不依赖音量/循环：它们由下面两个 effect 实时同步到 activeAudio，
+        // 放进这里会导致调一次音量就重新加载整首歌。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedSong, settings.useNewUi, settings.newUiAudioPreview, settings.newUiAutoplayAudio, settings.bulkDownloadMode]);
 
     // Update audio loop property immediately when setting changes
@@ -285,12 +288,13 @@ const App: React.FC = () => {
         }
     }, [activeAudio, settings.newUiAudioVolume]);
 
-    // Cleanup audio on unmount or song change via the effect above essentially
+    // 卸载 / 切换音频时暂停，避免退出后还在后台播放。
+    // 依赖里必须带上 activeAudio：空数组会把闭包钉在首次渲染的 null 上，清理等于没做。
     useEffect(() => {
          return () => {
             if (activeAudio) activeAudio.pause();
          }
-    }, []);
+    }, [activeAudio]);
 
 
     const handleFilesFound = useCallback((foundFiles: FileInfo[]) => {
@@ -473,7 +477,7 @@ const App: React.FC = () => {
                 {/* Background Image */}
                 <div
                     ref={bgRef}
-                    className="absolute inset-0 transition-all duration-1000 ease-in-out"
+                    className="absolute inset-0"
                     style={{
                         backgroundImage: bgImage ? `url("${bgImage}")` : 'none',
                         backgroundSize: 'cover',
@@ -481,6 +485,10 @@ const App: React.FC = () => {
                         filter: 'blur(30px) brightness(0.5)',
                         opacity: isBgLoaded ? 1 : 0,
                         transform: isBgLoaded ? 'scale(1.05)' : 'scale(1.15)',
+                        // 背景淡入仍用 1 秒，但 translate 必须单独走短过渡：
+                        // 之前用 transition-all 会把 mousemove 写入的位移也纳入 1 秒缓动，
+                        // 鼠标移动时背景始终追不上目标值，看起来就是「跟随失效」。
+                        transition: 'opacity 1000ms ease-in-out, transform 1000ms ease-in-out, filter 1000ms ease-in-out, translate 120ms ease-out',
                     }}
                 />
                 {/* Fallback/Base gradient used when image is not loaded or for slight darkening */}
@@ -556,7 +564,6 @@ const App: React.FC = () => {
             {/* 手机端：另一套组件树（推入式歌曲页 + 底部抽屉菜单），与上游布局一致 */}
             {isMobile ? (
                 <MobileLayout
-                    songs={sortedSongs}
                     filter={mobileFilter}
                     isLoadingSongs={isLoadingSongs}
                     errorSongs={errorSongs}

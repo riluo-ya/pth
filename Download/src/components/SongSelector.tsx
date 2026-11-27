@@ -88,7 +88,7 @@ export const SongSelector: React.FC<SongSelectorProps> = ({ isLoading, error, so
         };
         document.addEventListener("keydown", onKeyDown);
         return () => document.removeEventListener("keydown", onKeyDown);
-    }, [isOpen, isSortOpen, isRangeOpen]);
+    }, [isOpen, isSortOpen, isRangeOpen, setSearchTerm]);
     
     useEffect(() => {
         if (isOpen) {

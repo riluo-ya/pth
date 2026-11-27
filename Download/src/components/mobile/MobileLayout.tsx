@@ -11,7 +11,6 @@ const HISTORY_KEY = 'pcdSongView';
 type Sheet = 'menu' | 'range';
 
 interface MobileLayoutProps {
-    songs: Song[];
     filter: SongFilter;
     isLoadingSongs: boolean;
     errorSongs: string | null;
@@ -54,7 +53,6 @@ const eyebrow = 'font-mono text-[10px] font-medium tracking-[.16em] text-[#22d3e
  * 与上游 MobileLayout 同构，菜单走底部抽屉；额外加了「返回导航」入口。
  */
 export const MobileLayout: React.FC<MobileLayoutProps> = ({
-    songs,
     filter,
     isLoadingSongs,
     errorSongs,

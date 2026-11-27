@@ -3,20 +3,19 @@ import { Song } from '../types';
 import { SongFilter } from '../hooks/useSongFilter';
 import { NameCombobox } from './NameCombobox';
 import { XMarkIcon } from './Icons';
-import { QuickFilters, emptyQuickFilters, DIFFS } from '../utils/bulkFilters';
+import { emptyQuickFilters, DIFFS } from '../utils/bulkFilters';
 
 interface SongFilterPanelProps {
     filter: SongFilter;
     songs: Song[];
     filteredCount: number;
-    onClose?: () => void;
 }
 
 /**
  * 筛选面板的「内容」部分：桌面端放进下拉，手机端放进 BottomSheet，两边共用同一份。
  * 抽出来是为了避免两套布局各写一遍筛选逻辑，改一处即可。
  */
-export const SongFilterPanel: React.FC<SongFilterPanelProps> = ({ filter, songs, filteredCount, onClose }) => {
+export const SongFilterPanel: React.FC<SongFilterPanelProps> = ({ filter, songs, filteredCount }) => {
     const { filters, setFilters, setFilter, toggleDiffFilter, charterOptions, composerOptions, activeFilterCount } = filter;
 
     return (

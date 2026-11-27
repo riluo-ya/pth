@@ -64,7 +64,7 @@ export const ClearCacheButton: React.FC<ClearCacheButtonProps> = ({
 
             await clearSiteCache();
             await hardReload();
-            onDone && onDone();
+            onDone?.();
             // 正常情况页面已经跳转，不会走到这里
         } catch (e) {
             console.error('[clearCache] 清除失败', e);

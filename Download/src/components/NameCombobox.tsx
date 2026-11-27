@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { CheckIcon, XMarkIcon } from './Icons';
 import { NameOption, filterNameOptions, resolveNameCommit } from '../utils/bulkFilters';
 
@@ -40,6 +40,13 @@ export const NameCombobox: React.FC<NameComboboxProps> = ({ placeholder, options
         [options, draft]
     );
 
+    /** 失焦或关闭时确认输入：精确命中候选才生效，否则回退到已选值 */
+    const commitDraft = useCallback(() => {
+        const next = resolveNameCommit(options, draft, value);
+        onChange(next);
+        setDraft(next);
+    }, [options, draft, value, onChange]);
+
     // 点击外部关闭
     useEffect(() => {
         if (!open) return;
@@ -51,18 +58,11 @@ export const NameCombobox: React.FC<NameComboboxProps> = ({ placeholder, options
         };
         document.addEventListener('mousedown', onDown);
         return () => document.removeEventListener('mousedown', onDown);
-    }, [open, draft, options]);
+    }, [open, commitDraft]);
 
     useEffect(() => {
         if (open) setHighlight(0);
     }, [open, draft]);
-
-    /** 失焦或关闭时确认输入：精确命中候选才生效，否则回退到已选值 */
-    const commitDraft = () => {
-        const next = resolveNameCommit(options, draft, value);
-        onChange(next);
-        setDraft(next);
-    };
 
     const pick = (name: string) => {
         onChange(name);

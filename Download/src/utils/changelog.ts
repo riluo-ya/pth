@@ -29,17 +29,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { updateLogs as bundledLogs, UpdateLog } from '../aboutData';
 
-/** 部署基础路径（Vite 的 base，默认 '/'） */
-function getBaseUrl(): string {
-    try {
-        const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-        if (env && typeof env.BASE_URL === 'string' && env.BASE_URL) return env.BASE_URL;
-    } catch (e) {
-        /* 忽略 */
-    }
-    return '/';
-}
-
 export interface ChangelogSource {
     url: string;
     label: string;
@@ -56,7 +45,7 @@ function localChangelogUrl(): string {
         // 下载站位于 /download/，上一级就是站点根，data/ 与它同级。
         // 用当前页面 URL 推导，站点挂在域名根或仓库子路径下都能命中。
         return new URL('../data/changelog.json', window.location.href).href;
-    } catch (e) {
+    } catch {
         return '/data/changelog.json';
     }
 }

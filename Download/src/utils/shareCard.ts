@@ -475,7 +475,7 @@ function supportsCanvasFilter(): boolean {
         if (!c) return false;
         c.filter = 'blur(2px)';
         return c.filter !== 'none' && c.filter !== '';
-    } catch (e) {
+    } catch {
         return false;
     }
 }
@@ -1121,7 +1121,7 @@ export function renderShareCard(input: ShareCardInput): HTMLCanvasElement {
         const ox = qrX + (qrBox - draw) / 2;
         const oy = qrY + (qrBox - draw) / 2;
         drawQrToCanvas(ctx, matrix, ox, oy, moduleSize, '#0b1120', '#ffffff');
-    } catch (e) {
+    } catch {
         // 二维码生成失败不应阻断整张卡片
         ctx.fillStyle = '#94a3b8';
         ctx.font = `400 20px ${FONT_STACK}`;

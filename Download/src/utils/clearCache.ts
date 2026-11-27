@@ -99,7 +99,7 @@ export async function clearSiteCache(): Promise<ClearCacheReport> {
                                 req.onsuccess = () => resolve();
                                 req.onerror = () => resolve();
                                 req.onblocked = () => resolve();
-                            } catch (e) {
+                            } catch {
                                 resolve();
                             }
                         })
@@ -156,7 +156,7 @@ export async function hardReload(fallbackDelay = 800): Promise<void> {
         const url = new URL(window.location.href);
         url.searchParams.set('_nc', String(Date.now()));
         next = url.toString();
-    } catch (e) {
+    } catch {
         const sep = window.location.href.includes('?') ? '&' : '?';
         next = `${window.location.href}${sep}_nc=${Date.now()}`;
     }
@@ -167,14 +167,14 @@ export async function hardReload(fallbackDelay = 800): Promise<void> {
             fetch(next, { cache: 'reload', mode: 'same-origin', credentials: 'same-origin' }),
             new Promise((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 2500)),
         ]);
-    } catch (e) {
+    } catch {
         /* 失败无所谓，后面还有兜底 */
     }
 
     // b. 带时间戳跳转
     try {
         window.location.replace(next);
-    } catch (e) {
+    } catch {
         window.location.href = next;
     }
 
@@ -182,7 +182,7 @@ export async function hardReload(fallbackDelay = 800): Promise<void> {
     window.setTimeout(() => {
         try {
             window.location.reload();
-        } catch (e) {
+        } catch {
             /* 忽略 */
         }
     }, fallbackDelay);

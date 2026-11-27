@@ -264,7 +264,7 @@ export const BulkDownloadPanel: React.FC<BulkDownloadPanelProps> = ({ songs, isL
     }, [selectedSongs, batchSize]);
 
     /** 把 worker 报的失败过滤掉「本来就不存在」的，只留真正该有的 */
-    const meaningfulFailures = (failed: FailedFile[]): FailedFile[] =>
+    const meaningfulFailures = useCallback((failed: FailedFile[]): FailedFile[] =>
         failed.filter(f => {
             if (f.fileType === 'Audio') return true;
             const m = f.fileType.match(/^Chart \((\w+)\)$/);
@@ -274,7 +274,7 @@ export const BulkDownloadPanel: React.FC<BulkDownloadPanelProps> = ({ songs, isL
             }
             // 曲绘有三个候选尺寸，缺其中一两个是正常的
             return false;
-        });
+        }), [songs]);
 
     const runExport = useCallback(async (targets: Song[][], isRetry: boolean) => {
         if (targets.length === 0) return;
@@ -328,7 +328,7 @@ export const BulkDownloadPanel: React.FC<BulkDownloadPanelProps> = ({ songs, isL
             abortRef.current = null;
             if (!isRetry) setResult(prev => prev);
         }
-    }, [delaySec, songs]);
+    }, [delaySec, exportDiffs, meaningfulFailures, packaging, settings]);
 
     const handleStart = () => {
         if (selectedSongs.length === 0) return;
@@ -657,9 +657,6 @@ export const BulkDownloadPanel: React.FC<BulkDownloadPanelProps> = ({ songs, isL
                                     const song = finalSongs[item.index];
                                     const checked = selectedIds.has(song.id);
                                     const levels = songLevels(song);
-                                    const top = levels.length
-                                        ? Math.max(...levels.map(l => l.level))
-                                        : null;
                                     const bad = blacklistedDiffs(song);
                                     return (
                                         <div

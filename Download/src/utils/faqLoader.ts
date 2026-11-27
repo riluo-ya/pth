@@ -18,17 +18,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { faqData as bundledFaqs } from '../faqData';
 
-/** 部署基础路径（Vite 的 base，默认 '/'） */
-function getBaseUrl(): string {
-    try {
-        const env = (import.meta as unknown as { env?: Record<string, string> }).env;
-        if (env && typeof env.BASE_URL === 'string' && env.BASE_URL) return env.BASE_URL;
-    } catch (e) {
-        /* 忽略 */
-    }
-    return '/';
-}
-
 export interface FaqLink {
     text: string;
     url: string;

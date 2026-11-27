@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Song } from '../types';
 import { SOURCES, getSourceId, resolveRawUrlFor } from '../utils/sources';
 import type { ResourceSource } from '../utils/sources';
@@ -117,16 +117,15 @@ async function loadIllustration(songId: string, timeoutMs = 7000): Promise<Illus
     return new Promise<IllustrationResult>(resolve => {
         let settled = false;
         let pending = candidates.length;
-        let timer: number | undefined;
 
-        const finish = (r: IllustrationResult) => {
+        const timer = window.setTimeout(() => finish({ img: null, via: '' }), timeoutMs);
+
+        function finish(r: IllustrationResult) {
             if (settled) return;
             settled = true;
-            if (timer !== undefined) window.clearTimeout(timer);
+            window.clearTimeout(timer);
             resolve(r);
-        };
-
-        timer = window.setTimeout(() => finish({ img: null, via: '' }), timeoutMs);
+        }
 
         candidates.forEach(c => {
             loadImage(c.url, timeoutMs).then(img => {
@@ -166,11 +165,11 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
         settings.shareCardNoteCounts;
 
     // 只把设置里开启的项交给卡片渲染
-    const visibleChartInfo = {
+    const visibleChartInfo = useMemo(() => ({
         bpm: settings.shareCardBpm ? chartInfo.bpm : null,
         judgeLines: settings.shareCardJudgeLines ? chartInfo.judgeLines : null,
         duration: settings.shareCardDuration ? chartInfo.duration : null,
-    };
+    }), [chartInfo, settings.shareCardBpm, settings.shareCardJudgeLines, settings.shareCardDuration]);
 
     const illuRef = useRef<HTMLImageElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -208,6 +207,8 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
         return () => {
             cancelled = true;
         };
+        // 刻意只依赖 song?.id：同一首歌的对象引用变化时不必重新加载曲绘。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, song?.id, illuAttempt]);
 
     /** 曲绘没加载出来时，重新跑一遍多线路竞争 */
@@ -238,7 +239,7 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
             setBuildError(err instanceof Error ? err.message : String(err));
             setStatus('idle');
         }
-    }, [song, illuReady, themeId, noteCounts, chartInfo, settings.shareCardNoteCounts, visibleChartInfo.bpm, visibleChartInfo.judgeLines, visibleChartInfo.duration]);
+    }, [song, illuReady, themeId, noteCounts, settings.shareCardNoteCounts, visibleChartInfo]);
 
     useEffect(() => {
         build();
@@ -280,6 +281,8 @@ export const ShareCardPopup: React.FC<ShareCardPopupProps> = ({ song, isOpen, on
         return () => {
             cancelled = true;
         };
+        // 同上：只用 song?.id 判断曲目是否更换，避免同曲对象引用变化重复解析谱面。
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [needsChart, song?.id, isOpen]);
 
     /** 下载按钮的反馈状态：null 为常态 */

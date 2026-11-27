@@ -33,6 +33,8 @@ export const ResourceErrorProvider: React.FC<{ children: ReactNode }> = ({ child
     );
 };
 
+// Provider 与配套 hook 同文件是 React Context 的常见写法，fast-refresh 规则在此不适用。
+// eslint-disable-next-line react-refresh/only-export-components
 export const useResourceError = (): ResourceErrorContextType => {
     const context = useContext(ResourceErrorContext);
     if (!context) {
